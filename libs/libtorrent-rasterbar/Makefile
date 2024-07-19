@@ -1,73 +1,68 @@
+#
+# Copyright (C) 2007-2021
+#
+
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=libtorrent-rasterbar
-PKG_VERSION:=2.0.9
+PKG_VERSION:=1.2.14
 PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
-PKG_SOURCE_URL:=https://github.com/arvidn/libtorrent/releases/download/v$(PKG_VERSION)/
-PKG_HASH:=90cd92b6061c5b664840c3d5e151d43fedb24f5b2b24e14425ffbb884ef1798e
+PKG_SOURCE_URL:=https://github.com/arvidn/libtorrent/releases/download/v$(PKG_VERSION)
+PKG_HASH:=9e27bf359b45236d4490960faffc796528f3adbdea6aeb6881d39f310e27953f
 
-PKG_MAINTAINER:=David Yang <mmyangfl@gmail.com>
 PKG_LICENSE:=BSD-3-Clause
-PKG_LICENSE_FILES:=COPYING
+PKG_LICENSE_FILES:=LICENSE
+PKG_CPE_ID:=cpe:/a:libtorrent:libtorrent
+
+PKG_FIXUP:=autoreconf
+PKG_INSTALL:=1
+PKG_BUILD_PARALLEL:=1
+PKG_USE_MIPS16:=0
 
 include $(INCLUDE_DIR)/package.mk
-include $(INCLUDE_DIR)/cmake.mk
+include $(INCLUDE_DIR)/nls.mk
 
-define Package/libtorrent-rasterbar/Default
-	TITLE:=Rasterbar BitTorrent library
-	URL:=https://libtorrent.org/
+define Package/$(PKG_NAME)
+  SECTION:=libs
+  CATEGORY:=Libraries
+  TITLE:=C++ bittorrent library by Rasterbar Software
+  URL:=https://www.libtorrent.org
+  DEPENDS:=+boost +boost-system +libgcc +libopenssl +libstdcpp $(ICONV_DEPENDS)
+  ABI_VERSION:=10
 endef
 
-define Package/libtorrent-rasterbar
-	$(call Package/libtorrent-rasterbar/Default)
-	SECTION:=libs
-	CATEGORY:=Libraries
-	DEPENDS:=+boost +boost-system +libopenssl +libatomic +libstdcpp
+define Package/$(PKG_NAME)/description
+  Libtorrent is a feature complete C++ bittorrent implementation focusing on
+  efficiency and scalability. It runs on embedded devices as well as desktops.
+  It boasts a well documented library interface that is easy to use.
 endef
 
-#define Package/python3-libtorrent
-#	$(call Package/libtorrent-rasterbar/Default)
-#	SECTION:=lang
-#	CATEGORY:=Languages
-#	SUBMENU:=Python
-#	TITLE+= (Python 3)
-#	DEPENDS:=+libtorrent-rasterbar +boost-python
-#endef
+TARGET_CFLAGS += $(FPIC) -std=c++14 -ffunction-sections -fdata-sections
+TARGET_LDFLAGS += -Wl,--gc-sections,--as-needed
 
-define Package/libtorrent-rasterbar/description
-	Rasterbar libtorrent is a C++ library that aims to be a good alternative to
-	all the other bittorrent implementations around.
-endef
-
-#define Package/python3-libtorrent/description
-#	$(call Package/libtorrent-rasterbar/description)
-#	This package contains Python 3 bindings for the libtorrent-rasterbar library.
-#endef
-
-#CMAKE_OPTIONS += \
-#	-Dpython-bindings=ON \
-#	-Dpython-egg-info=ON
+CONFIGURE_ARGS += \
+	--enable-shared=yes \
+	--enable-static=yes \
+	--disable-debug \
+	--disable-rpath \
+	--enable-logging=no \
+	--enable-encryption \
+	--disable-deprecated-functions \
+	--with-gnu-ld \
+	--with-boost=$(STAGING_DIR)/usr \
+	--with-libiconv \
+	--with-libiconv-prefix=$(ICONV_PREFIX)
 
 define Build/InstallDev
-	$(INSTALL_DIR) $(1)/usr/include
-	$(CP) $(PKG_INSTALL_DIR)/usr/include/libtorrent $(1)/usr/include/
-	$(INSTALL_DIR) $(1)/usr/lib
-	$(CP) $(PKG_INSTALL_DIR)/usr/lib/libtorrent-rasterbar.so* $(1)/usr/lib/
-	$(INSTALL_DIR) $(1)/usr/lib/pkgconfig
-	$(CP) $(PKG_INSTALL_DIR)/usr/lib/pkgconfig/libtorrent-rasterbar.pc $(1)/usr/lib/pkgconfig/
+	$(INSTALL_DIR) $(1)
+	$(CP) $(PKG_INSTALL_DIR)/* $(1)
 endef
 
-define Package/libtorrent-rasterbar/install
+define Package/$(PKG_NAME)/install
 	$(INSTALL_DIR) $(1)/usr/lib
-	$(CP) $(PKG_INSTALL_DIR)/usr/lib/libtorrent-rasterbar.so.* $(1)/usr/lib/
+	$(CP) $(PKG_INSTALL_DIR)/usr/lib/*.so* $(1)/usr/lib
 endef
 
-#define Package/python3-libtorrent/install
-#	$(INSTALL_DIR) $(1)/usr/lib/python2.7/site-packages
-#	$(CP) $(PKG_INSTALL_DIR)/usr/lib/python2.7/site-packages/*.so* $(1)/usr/lib/python2.7/site-packages/
-#endef
-
-$(eval $(call BuildPackage,libtorrent-rasterbar))
-#$(eval $(call BuildPackage,python3-libtorrent))
+$(eval $(call BuildPackage,$(PKG_NAME)))
