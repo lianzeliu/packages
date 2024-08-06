@@ -9,8 +9,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=softethervpn
-PKG_VERSION:=4.41-9782
-PKG_VERREL:=beta
+PKG_VERSION:=4.29-9680
+PKG_VERREL:=rtm
 PKG_RELEASE:=2
 
 PKG_SOURCE:=softether-src-v$(PKG_VERSION)-$(PKG_VERREL).tar.gz
