@@ -34,7 +34,7 @@ define Package/qbittorrent
 	CATEGORY:=Network
 	SUBMENU:=BitTorrent
 	DEPENDS:=+USE_GLIBC:librt +USE_GLIBC:libpthread +libgcc +libstdcpp \
-		+rblibtorrent \
+		+libtorrent-rasterbar \
 		+libQt6Core \
 		+libQt6Network \
 		+libQt6Sql \
