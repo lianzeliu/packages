@@ -34,12 +34,12 @@ define Package/qbittorrent
 	CATEGORY:=Network
 	SUBMENU:=BitTorrent
 	DEPENDS:=+libgcc +libstdcpp \
-		+rblibtorrent \
+		+libtorrent-rasterbar \
 		+libopenssl \
-		+qt5-core \
-		+qt5-network \
-		+qt5-sql \
-		+qt5-xml \
+		+libqt5core \
+		+libqt5network \
+		+libqt5sql \
+		+libqt5xml \
 		+zlib
 	TITLE:=bittorrent client programmed in C++ / Qt
 	URL:=https://www.qbittorrent.org/
