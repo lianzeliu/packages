@@ -5,7 +5,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=libtorrent-rasterbar
-PKG_VERSION:=1.2.14
+PKG_VERSION:=1.2.18
 #PKG_VERSION:=1.2.19
 PKG_RELEASE:=1
 
