@@ -3,7 +3,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=softethervpn5
-PKG_VERSION:=5.02.5187
+PKG_VERSION:=5.02.5185
 PKG_RELEASE:=1
 
 PKG_LICENSE:=GPL-2.0
