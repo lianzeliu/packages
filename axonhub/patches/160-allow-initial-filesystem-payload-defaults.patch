@@ -1,0 +1,183 @@
+From: VIKINGYFY <viking.yfy@qq.com>
+Date: Tue, 13 Oct 2026 21:22:30 +0800
+Subject: [PATCH] system: accept an initial filesystem payload directory
+
+Allow LuCI to select a filesystem payload directory when a new system is
+initialized. Create the owner, database and filesystem storage, and
+persist the built-in storage policy in the same database transaction.
+Existing initialized systems retain their configured storage and policy.
+
+Use the core storage defaults directly rather than maintaining a second
+retention configuration. Filesystem failures roll back initialization;
+never downgrade a configured filesystem deployment to database payloads.
+
+Base-Commit: 7a0cfbf42b00829dd8811cc87488f6194ed5ae02
+
+---
+
+diff --git a/conf/conf.go b/conf/conf.go
+index 1dfec89..959c53f 100644
+--- a/conf/conf.go
++++ b/conf/conf.go
+@@ -28,17 +28,18 @@ import (
+ type Config struct {
+ 	fx.Out `yaml:"-" json:"-"`
+ 
+-	DB               db.Config           `conf:"db" yaml:"db" json:"db"`
+-	Log              log.Config          `conf:"log" yaml:"log" json:"log"`
+-	APIServer        server.Config       `conf:"server" yaml:"server" json:"server"`
+-	Metrics          metrics.Config      `conf:"metrics" yaml:"metrics" json:"metrics"`
+-	GC               gc.Config           `conf:"gc" yaml:"gc" json:"gc"`
+-	Cache            xcache.Config       `conf:"cache" yaml:"cache" json:"cache"`
+-	ProviderQuota    providerQuotaConfig `conf:"provider_quota" yaml:"provider_quota" json:"provider_quota"`
+-	OIDC             biz.OIDCConfig      `conf:"oidc" yaml:"oidc" json:"oidc"`
+-	DisableSSLVerify bool                `name:"disable_ssl_verify" yaml:"-" json:"-"`
+-	AllowNoAuth      bool                `name:"allow_no_auth" yaml:"-" json:"-"`
+-	APIKeyPrefix     string              `name:"api_key_prefix" yaml:"-" json:"-"`
++	DB               db.Config                `conf:"db" yaml:"db" json:"db"`
++	Log              log.Config               `conf:"log" yaml:"log" json:"log"`
++	APIServer        server.Config            `conf:"server" yaml:"server" json:"server"`
++	Metrics          metrics.Config           `conf:"metrics" yaml:"metrics" json:"metrics"`
++	GC               gc.Config                `conf:"gc" yaml:"gc" json:"gc"`
++	Cache            xcache.Config            `conf:"cache" yaml:"cache" json:"cache"`
++	ProviderQuota    providerQuotaConfig      `conf:"provider_quota" yaml:"provider_quota" json:"provider_quota"`
++	OIDC             biz.OIDCConfig           `conf:"oidc" yaml:"oidc" json:"oidc"`
++	InitialStorage   biz.InitialStorageConfig `conf:"initial_storage" yaml:"initial_storage" json:"initial_storage"`
++	DisableSSLVerify bool                     `name:"disable_ssl_verify" yaml:"-" json:"-"`
++	AllowNoAuth      bool                     `name:"allow_no_auth" yaml:"-" json:"-"`
++	APIKeyPrefix     string                   `name:"api_key_prefix" yaml:"-" json:"-"`
+ }
+ 
+ type providerQuotaConfig struct {
+@@ -212,6 +213,9 @@ func customizedDecodeHook(srcType reflect.Type, dstType reflect.Type, data any)
+ 
+ // setDefaults sets default configuration values.
+ func setDefaults(v *viper.Viper) {
++	// Initial storage defaults are supplied by the deployment for new databases.
++	v.SetDefault("initial_storage.payload_directory", "")
++
+ 	// Server defaults
+ 	v.SetDefault("server.host", "0.0.0.0")
+ 	v.SetDefault("server.port", 8090)
+diff --git a/config.example.yml b/config.example.yml
+index 1521b67..fafd3c9 100644
+--- a/config.example.yml
++++ b/config.example.yml
+@@ -2,6 +2,11 @@
+ # AxonHub Configuration Example
+ # Copy this file to config.yml and modify as needed
+ 
++# Optional deployment defaults, applied only during first system initialization.
++# Existing storage choices and retention policies are never overwritten.
++initial_storage:
++  payload_directory: ""         # Absolute filesystem directory (env: AXONHUB_INITIAL_STORAGE_PAYLOAD_DIRECTORY)
++
+ # Server configuration
+ server:
+   host: "0.0.0.0"               # Server host (env: AXONHUB_SERVER_HOST)
+diff --git a/internal/server/biz/system.go b/internal/server/biz/system.go
+index c0d6486..b892de1 100644
+--- a/internal/server/biz/system.go
++++ b/internal/server/biz/system.go
+@@ -669,8 +669,9 @@ func (p *ProbeFrequency) UnmarshalGQL(v any) error {
+ type SystemServiceParams struct {
+ 	fx.In
+ 
+-	CacheConfig xcache.Config
+-	Ent         *ent.Client
++	CacheConfig    xcache.Config
++	Ent            *ent.Client
++	InitialStorage InitialStorageConfig
+ }
+ 
+ func NewSystemService(params SystemServiceParams) *SystemService {
+@@ -678,16 +679,18 @@ func NewSystemService(params SystemServiceParams) *SystemService {
+ 		AbstractService: &AbstractService{
+ 			db: params.Ent,
+ 		},
+-		CacheConfig: params.CacheConfig,
+-		Cache:       xcache.NewFromConfig[ent.System](params.CacheConfig),
++		CacheConfig:    params.CacheConfig,
++		Cache:          xcache.NewFromConfig[ent.System](params.CacheConfig),
++		InitialStorage: params.InitialStorage,
+ 	}
+ }
+ 
+ type SystemService struct {
+ 	*AbstractService
+ 
+-	CacheConfig xcache.Config
+-	Cache       xcache.Cache[ent.System]
++	CacheConfig    xcache.Config
++	Cache          xcache.Cache[ent.System]
++	InitialStorage InitialStorageConfig
+ 
+ 	mu           sync.RWMutex
+ 	timeLocation *time.Location
+@@ -818,8 +821,16 @@ func (s *SystemService) Initialize(ctx context.Context, params *InitializeSystem
+ 		return fmt.Errorf("failed to create primary data storage: %w", err)
+ 	}
+ 
++	defaultDataStorageID := primaryDataStorage.ID
++	if s.InitialStorage.PayloadDirectory != "" {
++		defaultDataStorageID, err = s.initializePayloadStorage(ctx, tx)
++		if err != nil {
++			return err
++		}
++	}
++
+ 	// Set default data storage ID.
+-	err = s.SetDefaultDataStorageID(ctx, primaryDataStorage.ID)
++	err = s.SetDefaultDataStorageID(ctx, defaultDataStorageID)
+ 	if err != nil {
+ 		return fmt.Errorf("failed to set default data storage ID: %w", err)
+ 	}
+diff --git a/internal/server/biz/system_initial_storage.go b/internal/server/biz/system_initial_storage.go
+new file mode 100644
+index 0000000..a6a6710
+--- /dev/null
++++ b/internal/server/biz/system_initial_storage.go
+@@ -0,0 +1,43 @@
++package biz
++
++import (
++	"context"
++	"fmt"
++	"os"
++	"path/filepath"
++
++	"github.com/looplj/axonhub/internal/ent"
++	"github.com/looplj/axonhub/internal/objects"
++)
++
++// InitialStorageConfig is applied only when creating a new AxonHub instance.
++// An empty directory leaves the deployment's database storage mode unchanged.
++type InitialStorageConfig struct {
++	PayloadDirectory string `conf:"payload_directory" yaml:"payload_directory" json:"payload_directory"`
++}
++
++func (s *SystemService) initializePayloadStorage(ctx context.Context, tx *ent.Tx) (int, error) {
++	cfg := s.InitialStorage
++	if !filepath.IsAbs(cfg.PayloadDirectory) || filepath.Clean(cfg.PayloadDirectory) == string(filepath.Separator) {
++		return 0, fmt.Errorf("initial_storage.payload_directory must be an absolute directory other than the filesystem root")
++	}
++	if err := os.MkdirAll(cfg.PayloadDirectory, 0o700); err != nil {
++		return 0, fmt.Errorf("create initial payload directory: %w", err)
++	}
++
++	storage, err := tx.DataStorage.Create().
++		SetName("Local Payloads").
++		SetDescription("Local filesystem payload storage").
++		SetType("fs").
++		SetSettings(&objects.DataStorageSettings{Directory: &cfg.PayloadDirectory}).
++		SetStatus("active").
++		Save(ctx)
++	if err != nil {
++		return 0, fmt.Errorf("create initial filesystem payload storage: %w", err)
++	}
++
++	if err := s.SetStoragePolicy(ctx, &defaultStoragePolicy); err != nil {
++		return 0, fmt.Errorf("set initial payload retention policy: %w", err)
++	}
++	return storage.ID, nil
++}

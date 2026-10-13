@@ -1,0 +1,144 @@
+From: VIKINGYFY <viking.yfy@qq.com>
+Date: Tue, 13 Oct 2026 18:57:04 +0800
+Subject: [PATCH] storage: publish local payloads atomically and check Close
+
+Writing directly to the final path can expose a partially written body,
+and streaming saves currently discard file Close errors.
+
+Write local FS payloads to a same-directory private temporary file, Sync
+and Close it, then Rename and sync the parent directory. Remove temporary
+files on failure and preserve the previously published file until rename.
+Propagate streaming Close failures. Add explicit local directory removal
+for whole-record GC while preserving the other storage backend paths.
+
+Base-Commit: 7a0cfbf42b00829dd8811cc87488f6194ed5ae02
+
+---
+
+diff --git a/internal/server/biz/data_storage.go b/internal/server/biz/data_storage.go
+index c8f4a71..f2c9274 100644
+--- a/internal/server/biz/data_storage.go
++++ b/internal/server/biz/data_storage.go
+@@ -1,6 +1,7 @@
+ package biz
+ 
+ import (
++	"bytes"
+ 	"context"
+ 	"crypto/tls"
+ 	"errors"
+@@ -576,10 +577,8 @@ func (s *DataStorageService) SaveData(ctx context.Context, ds *ent.DataStorage,
+ 
+ 		if ds.Type == datastorage.TypeFs {
+ 			key = filepath.FromSlash(key)
+-			err = fs.MkdirAll(filepath.Dir(key), 0o777)
+-			if err != nil {
+-				return fmt.Errorf("failed to create directory: %w, key: %s", err, key)
+-			}
++			_, err := writeLocalAtomic(ctx, fs, key, bytes.NewReader(data))
++			return err
+ 		} else if ds.Type == datastorage.TypeWebdav {
+ 			// For WebDAV, remove leading slash to avoid 405 error on some servers (e.g., Synology)
+ 			key = strings.TrimPrefix(key, "/")
+@@ -640,9 +639,11 @@ func (s *DataStorageService) SaveDataFromReader(ctx context.Context, ds *ent.Dat
+ 
+ 		if ds.Type == datastorage.TypeFs {
+ 			key = filepath.FromSlash(key)
+-			if err := fs.MkdirAll(filepath.Dir(key), 0o777); err != nil {
+-				return "", 0, fmt.Errorf("failed to create directory: %w, key: %s", err, key)
++			n, err := writeLocalAtomic(ctx, fs, key, r)
++			if err != nil {
++				return "", n, err
+ 			}
++			return key, n, nil
+ 		} else if ds.Type == datastorage.TypeWebdav {
+ 			// For WebDAV, remove leading slash to avoid 405 error on some servers (e.g., Synology)
+ 			key = strings.TrimPrefix(key, "/")
+@@ -660,13 +661,15 @@ func (s *DataStorageService) SaveDataFromReader(ctx context.Context, ds *ent.Dat
+ 		if err != nil {
+ 			return "", 0, fmt.Errorf("failed to create file: %w, key: %s", err, key)
+ 		}
+-		defer f.Close()
+-
+ 		n, err := io.Copy(f, r)
++		closeErr := f.Close()
+ 		if err != nil {
+ 			return "", 0, fmt.Errorf("failed to write file: %w, key: %s", err, key)
+ 		}
+ 
++		if closeErr != nil {
++			return "", n, fmt.Errorf("close file: %w", closeErr)
++		}
+ 		return key, n, nil
+ 	default:
+ 		return "", 0, fmt.Errorf("unsupported storage type: %s", ds.Type)
+@@ -717,6 +720,69 @@ func (s *DataStorageService) DeleteData(ctx context.Context, ds *ent.DataStorage
+ 	}
+ }
+ 
++// DeleteDataDirectory removes one exclusively owned local payload directory.
++// Callers must first establish that its record has no surviving child references.
++func (s *DataStorageService) DeleteDataDirectory(ctx context.Context, ds *ent.DataStorage, key string) error {
++	if ds.Type != datastorage.TypeFs {
++		return fmt.Errorf("recursive deletion requires local FS storage")
++	}
++	key = filepath.Clean(filepath.FromSlash(key))
++	if key == "/" || key == "." {
++		return fmt.Errorf("refusing to remove storage root")
++	}
++	if err := ctx.Err(); err != nil {
++		return err
++	}
++	fs, err := s.GetFileSystem(ctx, ds)
++	if err != nil {
++		return err
++	}
++	return fs.RemoveAll(key)
++}
++
++// writeLocalAtomic never truncates the published file. A failed write/close/sync
++// leaves the previous version untouched and removes the private temporary file.
++func writeLocalAtomic(ctx context.Context, fs afero.Fs, key string, reader io.Reader) (int64, error) {
++	if err := ctx.Err(); err != nil {
++		return 0, err
++	}
++	dir := filepath.Dir(key)
++	if err := fs.MkdirAll(dir, 0o700); err != nil {
++		return 0, fmt.Errorf("create payload directory: %w", err)
++	}
++	f, err := afero.TempFile(fs, dir, ".axonhub-*")
++	if err != nil {
++		return 0, fmt.Errorf("create payload temporary file: %w", err)
++	}
++	defer fs.Remove(f.Name())
++	n, writeErr := io.Copy(f, reader)
++	if writeErr == nil {
++		writeErr = ctx.Err()
++	}
++	if writeErr == nil {
++		writeErr = f.Sync()
++	}
++	closeErr := f.Close()
++	if err := errors.Join(writeErr, closeErr); err != nil {
++		return n, fmt.Errorf("write payload: %w", err)
++	}
++	if err := fs.Rename(f.Name(), key); err != nil {
++		return n, fmt.Errorf("publish payload: %w", err)
++	}
++	// Flush the rename. This complements file Sync; it cannot guarantee the
++	// behavior of an eMMC controller under power loss.
++	parent, err := fs.Open(dir)
++	if err != nil {
++		return n, fmt.Errorf("open payload directory: %w", err)
++	}
++	syncErr := parent.Sync()
++	closeErr = parent.Close()
++	if err := errors.Join(syncErr, closeErr); err != nil {
++		return n, fmt.Errorf("sync payload directory: %w", err)
++	}
++	return n, nil
++}
++
+ // LoadData loads data from the specified data storage.
+ // For database storage, it expects the data to be passed directly.
+ // For file system storage, it reads the data from the file.

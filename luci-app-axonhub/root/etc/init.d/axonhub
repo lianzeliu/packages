@@ -113,6 +113,7 @@ sync_cron() {
 start_service() {
 	local enabled port data_dir memory_limit gomaxprocs
 	local max_open_conns max_idle_conns log_level log_to_syslog cleanup_schedule log_file_max_age db_dsn
+	local gc_cleanup_schedule gc_enabled gc_cron
 
 	config_load axonhub
 	config_get_bool enabled main enabled 0
@@ -131,6 +132,17 @@ start_service() {
 	config_get max_open_conns main max_open_conns '10'
 	config_get max_idle_conns main max_idle_conns '5'
 	config_get log_level main log_level 'info'
+	config_get gc_cleanup_schedule main gc_cleanup_schedule
+
+	case "$gc_cleanup_schedule" in
+		disabled) gc_enabled=false; gc_cron='0 * * * *' ;;
+		daily) gc_enabled=true; gc_cron='0 2 * * *' ;;
+		hourly) gc_enabled=true; gc_cron='0 * * * *' ;;
+		*)
+			log_error "Invalid request history cleanup schedule: $gc_cleanup_schedule"
+			return 1
+			;;
+	esac
 
 	if [ "$data_dir" = 'auto' ]; then
 		data_dir="$($STORAGE_HELPER)"
@@ -208,6 +220,13 @@ start_service() {
 		"AXONHUB_DB_DSN=$db_dsn" \
 		"AXONHUB_DB_MAX_OPEN_CONNS=$max_open_conns" \
 		"AXONHUB_DB_MAX_IDLE_CONNS=$max_idle_conns" \
+		"AXONHUB_GC_ENABLED=$gc_enabled" \
+		"AXONHUB_GC_CRON=$gc_cron" \
+		"AXONHUB_GC_VACUUM_ENABLED=false" \
+		"AXONHUB_GC_BATCH_SIZE=125" \
+		"AXONHUB_GC_BATCH_INTERVAL=20ms" \
+		"AXONHUB_GC_TIMEOUT=10m" \
+		"AXONHUB_INITIAL_STORAGE_PAYLOAD_DIRECTORY=$data_dir/payloads" \
 		"AXONHUB_LOG_LEVEL=$log_level" \
 		"AXONHUB_LOG_ENCODING=console"
 	if [ "$log_to_syslog" -eq 1 ]; then

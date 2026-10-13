@@ -1,62 +1,65 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=axonhub
+PKG_UPSTREAM_VERSION:=unstable-20261013
 PKG_VERSION:=20261013
-PKG_RELEASE:=1
+PKG_RELEASE:=7
+PKG_SOURCE_VERSION:=7a0cfbf42b00829dd8811cc87488f6194ed5ae02
 
-# Updated by Build-AxonHub.yml only after a successful daily release.
-AXONHUB_BUILD_VERSION:=unstable-20261013
-AXONHUB_UPSTREAM_COMMIT:=7a0cfbf42b00829dd8811cc87488f6194ed5ae02
-
-ifeq ($(ARCH),aarch64)
-  AXONHUB_ARCH:=arm64
-  PKG_HASH:=5ff54604a71d6b10415be7c7e67d5794f5b6265079d413fccd5b12d57f187fa5
-else ifeq ($(ARCH),x86_64)
-  AXONHUB_ARCH:=amd64
-  PKG_HASH:=03f4f63eccd35fc3c1fe3242f86635c6104efb6aad35b698c1754430c2cd3115
-else ifeq ($(ARCH),loongarch64)
-  AXONHUB_ARCH:=loong64
-  PKG_HASH:=233302aec2857cd4df6192843f9c626d6ef6994b7d787d2acf76aeb6ceea09e8
-else
-  AXONHUB_ARCH:=unsupported
-  PKG_HASH:=skip
-endif
-
-PKG_SOURCE:=$(PKG_NAME)-$(AXONHUB_BUILD_VERSION)-$(AXONHUB_UPSTREAM_COMMIT)-$(ARCH_PACKAGES)
-PKG_SOURCE_URL:=https://github.com/VIKINGYFY/packages/releases/download/$(PKG_NAME)-$(AXONHUB_BUILD_VERSION)/$(PKG_NAME)_linux_$(AXONHUB_ARCH)?
-PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(AXONHUB_BUILD_VERSION)-$(AXONHUB_UPSTREAM_COMMIT)-$(ARCH)
-UNPACK_CMD=mkdir -p $(1) && $(CP) $(DL_DIR)/$(PKG_SOURCE) $(1)/$(PKG_NAME)
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_SOURCE_VERSION).tar.gz
+PKG_SOURCE_URL:=https://codeload.github.com/looplj/axonhub/tar.gz/$(PKG_SOURCE_VERSION)?
+PKG_HASH:=a2b9f2dfb2d095418ed087b16462e36026263b523c31a586e5537aeb88dd7520
+PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_SOURCE_VERSION)
 
 PKG_LICENSE:=Apache-2.0 AND LGPL-3.0-only
 PKG_LICENSE_FILES:=LICENSE
 PKG_MAINTAINER:=VIKINGYFY
 
-# The release binary is already stripped. Preserve it byte-for-byte because
-# OpenWrt's sstrip corrupts the section table of this large static Go ELF.
-RSTRIP:=:
+PKG_BUILD_DEPENDS:=golang/host node/host node-pnpm/host
+PKG_BUILD_PARALLEL:=1
+PKG_BUILD_FLAGS:=no-mips16
+
+GO_PKG:=github.com/looplj/axonhub
+GO_PKG_BUILD_PKG:=$(GO_PKG)/cmd/axonhub
+GO_PKG_LDFLAGS_X:= \
+	$(GO_PKG)/internal/build.Version=$(PKG_UPSTREAM_VERSION)-r$(PKG_RELEASE) \
+	$(GO_PKG)/internal/build.Commit=$(PKG_SOURCE_VERSION)
+GO_PKG_TAGS:=nomsgpack
 
 include $(INCLUDE_DIR)/package.mk
+include $(TOPDIR)/feeds/packages/lang/golang/golang-package.mk
 
 define Package/$(PKG_NAME)
   SECTION:=net
   CATEGORY:=Network
   SUBMENU:=Web Servers/Proxies
-  TITLE:=AxonHub AI gateway ($(AXONHUB_BUILD_VERSION))
+  TITLE:=AxonHub AI gateway ($(PKG_UPSTREAM_VERSION))
   URL:=https://github.com/looplj/axonhub
   DEPENDS:=@(aarch64||x86_64||loongarch64) +ca-bundle +zoneinfo-core +zoneinfo-asia
 endef
 
 define Package/$(PKG_NAME)/description
- AxonHub is an all-in-one AI gateway with an embedded management interface,
- API format translation, request tracing and provider load balancing.
+  AxonHub is an all-in-one AI gateway with an embedded management interface,
+  API format translation, request tracing and provider load balancing.
 endef
 
 define Build/Compile
+	( \
+		set -e; \
+		export PNPM_HOME="$(PKG_BUILD_DIR)/.pnpm-home"; \
+		cd "$(PKG_BUILD_DIR)/frontend"; \
+		pnpm install --frozen-lockfile; \
+		pnpm run build; \
+		cd "$(PKG_BUILD_DIR)"; \
+		rm -rf internal/server/static/dist; \
+		mkdir -p internal/server/static/dist; \
+		cp -a frontend/dist/. internal/server/static/dist/; \
+	)
+	$(call GoPackage/Build/Compile)
 endef
 
 define Package/$(PKG_NAME)/install
-	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_BUILD_DIR)/axonhub $(1)/usr/bin/axonhub
+	$(call GoPackage/Package/Install/Bin,$(1))
 endef
 
 $(eval $(call BuildPackage,$(PKG_NAME)))

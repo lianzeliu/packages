@@ -1,0 +1,123 @@
+From: VIKINGYFY <viking.yfy@qq.com>
+Date: Tue, 13 Oct 2026 18:57:04 +0800
+Subject: [PATCH] graphql: reuse authorized channel reads within each query
+
+Execution credential-index and suffix resolvers repeatedly load the same
+channel while rendering a request list.
+
+Cache successful authorized channel reads for one query operation, keyed
+by client, channel, user/API key, project and explicit privacy decision.
+Serialize concurrent lookups to avoid duplicate reads. Mutations use
+direct authorized queries so credential or permission changes are read
+immediately, and no authorization result survives the operation.
+
+Base-Commit: 7a0cfbf42b00829dd8811cc87488f6194ed5ae02
+
+---
+
+diff --git a/internal/server/gql/channel_lookup.go b/internal/server/gql/channel_lookup.go
+new file mode 100644
+index 0000000..1c320e5
+--- /dev/null
++++ b/internal/server/gql/channel_lookup.go
+@@ -0,0 +1,79 @@
++package gql
++
++import (
++	"context"
++	"sync"
++
++	"github.com/99designs/gqlgen/graphql"
++	"github.com/vektah/gqlparser/v2/ast"
++
++	"github.com/looplj/axonhub/internal/contexts"
++	"github.com/looplj/axonhub/internal/ent"
++	"github.com/looplj/axonhub/internal/ent/privacy"
++)
++
++type channelLookupKey struct{}
++
++// Channel permissions depend on the user/API key and explicit Ent decision.
++// Include these and the selected project so a locally changed authorization
++// context cannot reuse a more privileged result from the same operation.
++type channelScopeKey struct {
++	client     *ent.Client
++	id         int
++	user       *ent.User
++	apiKey     *ent.APIKey
++	project    int
++	hasProject bool
++	decision   string
++}
++
++type channelLookupCache struct {
++	mu       sync.Mutex
++	channels map[channelScopeKey]*ent.Channel
++}
++
++func withChannelLookupCache(ctx context.Context) context.Context {
++	return context.WithValue(ctx, channelLookupKey{}, &channelLookupCache{
++		channels: make(map[channelScopeKey]*ent.Channel),
++	})
++}
++
++func cacheChannelLookups(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
++	// Mutations can change credentials or permissions during the operation.
++	if graphql.GetOperationContext(ctx).Operation.Operation == ast.Query {
++		ctx = withChannelLookupCache(ctx)
++	}
++	return next(ctx)
++}
++
++func getNilableChannel(ctx context.Context, client *ent.Client, id int) (*ent.Channel, error) {
++	if id == 0 {
++		return nil, nil
++	}
++	cache, ok := ctx.Value(channelLookupKey{}).(*channelLookupCache)
++	if !ok {
++		return loadNilableChannel(ctx, client, id)
++	}
++	key := channelScopeKey{client: client, id: id}
++	key.user, _ = contexts.GetUser(ctx)
++	key.apiKey, _ = contexts.GetAPIKey(ctx)
++	key.project, key.hasProject = contexts.GetProjectID(ctx)
++	if decision, ok := privacy.DecisionFromContext(ctx); ok {
++		key.decision = "allow"
++		if decision != nil {
++			key.decision = decision.Error()
++		}
++	}
++	// Hold the operation-local lock during the authorized read to collapse
++	// concurrent index/suffix/edge resolvers into a single lookup per channel.
++	cache.mu.Lock()
++	defer cache.mu.Unlock()
++	if ch, ok := cache.channels[key]; ok {
++		return ch, nil
++	}
++	ch, err := loadNilableChannel(ctx, client, id)
++	if err == nil {
++		cache.channels[key] = ch
++	}
++	return ch, err
++}
+diff --git a/internal/server/gql/graphql.go b/internal/server/gql/graphql.go
+index 019b2c7..e30b21d 100644
+--- a/internal/server/gql/graphql.go
++++ b/internal/server/gql/graphql.go
+@@ -138,6 +138,7 @@ func NewGraphqlHandlers(deps Dependencies) *GraphqlHandler {
+ 	})
+ 	gqlSrv.Use(&loggingTracer{})
+ 	gqlSrv.AroundOperations(apiKeyReadOnly)
++	gqlSrv.AroundOperations(cacheChannelLookups)
+ 	skipTestChannelTransaction := entgql.SkipOperations("TestChannel", "TestChannelAPIKeys")
+ 	skipBulkImportTransaction := entgql.SkipIfHasFields("bulkImportChannels")
+ 	gqlSrv.Use(entgql.Transactioner{
+@@ -225,7 +226,7 @@ var guidTypeToNodeType = map[string]string{
+ 	ent.TypePrompt:                  prompt.Table,
+ }
+ 
+-func getNilableChannel(ctx context.Context, client *ent.Client, channelID int) (*ent.Channel, error) {
++func loadNilableChannel(ctx context.Context, client *ent.Client, channelID int) (*ent.Channel, error) {
+ 	if channelID == 0 {
+ 		return nil, nil
+ 	}

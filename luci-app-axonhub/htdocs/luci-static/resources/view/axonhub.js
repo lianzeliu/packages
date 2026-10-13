@@ -264,7 +264,8 @@ return view.extend({
 		o.rmempty = false;
 
 		o = s.taboption('general', form.ListValue, 'data_dir', _('Database and settings directory'),
-			_('Changing this path starts a separate instance unless the existing database is moved while AxonHub is stopped.'));
+			_('Changing this path starts a separate instance unless the existing database is moved while AxonHub is stopped.') + ' ' +
+			_('New databases store request and response payloads in the payloads subdirectory. Existing AxonHub storage settings are preserved.'));
 		o.default = defaultDataDir;
 		o.rmempty = false;
 
@@ -336,6 +337,14 @@ return view.extend({
 		o.default = 'daily';
 		o.rmempty = false;
 		o.depends('log_to_syslog', '0');
+
+		o = s.taboption('advanced', form.ListValue, 'gc_cleanup_schedule', _('Automatic request history cleanup'),
+			_('Clean up expired requests, usage records and stored payloads according to the retention policy in AxonHub. Daily cleanup runs at 02:00 UTC; hourly cleanup runs on the hour.'));
+		o.value('disabled', _('Disabled'));
+		o.value('daily', _('Every day'));
+		o.value('hourly', _('Every hour'));
+		o.default = 'hourly';
+		o.rmempty = false;
 
 		return m.render();
 	},

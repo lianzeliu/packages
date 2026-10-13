@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Patch context and source line endings must be preserved verbatim.
+*.patch -text -whitespace
