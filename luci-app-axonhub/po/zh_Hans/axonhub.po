@@ -191,7 +191,9 @@ msgstr "AxonHub（AI 网关）原生服务和管理入口。—— AI Edition"
 msgid ""
 "New databases store request and response payloads in the payloads "
 "subdirectory. Existing AxonHub storage settings are preserved."
-msgstr "新数据库将请求和响应正文存放在 payloads 子目录中。已有 AxonHub 存储设置会保留。"
+msgstr ""
+"新数据库将请求和响应正文存放在 payloads 子目录中。已有 AxonHub 存储设置会保"
+"留。"
 
 #: luci-app-axonhub/htdocs/luci-static/resources/view/axonhub.js:110
 msgid "No AxonHub log entries were found."
