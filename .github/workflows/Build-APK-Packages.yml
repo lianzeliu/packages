@@ -249,16 +249,16 @@ jobs:
             release_id="$(gh api \
               "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
               --jq '.id')"
+            assets_file="$RUNNER_TEMP/release-asset-names.txt"
+            gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
+              --jq '.[].name' > "$assets_file"
             while IFS= read -r name; do
               if [[ "$name" =~ ^${ARCHIVE_PREFIX}-${build_date}-r([0-9]+)\.zip$ ]] &&
                  (( BASH_REMATCH[1] >= release )); then
                 release=$((BASH_REMATCH[1] + 1))
               fi
-            done < <(
-              gh api --paginate \
-                "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
-                --jq '.[].name'
-            )
+            done < "$assets_file"
           fi
 
           archive_name="${ARCHIVE_PREFIX}-${build_date}-r${release}.zip"
@@ -315,7 +315,17 @@ jobs:
 
       - name: 每个软件包仅保留最新版本
         run: |
-          .github/scripts/prune-apk-release.sh \
+          tool_dir="$RUNNER_TEMP/apk-tools"
+          archive="$RUNNER_TEMP/apk-tools-static.apk"
+          mkdir -p "$tool_dir"
+          curl -fsSL --retry 3 \
+            https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/apk-tools-static-3.0.8-r0.apk \
+            -o "$archive"
+          printf '%s  %s\n' \
+            2edccd3267ce540f8d2371a0f394e84b40d8348ecc28425309e6d07079ed1259 \
+            "$archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$tool_dir" sbin/apk.static
+          APK_TOOL="$tool_dir/sbin/apk.static" .github/scripts/prune-apk-release.sh \
             "$RELEASE_TAG" 1 "$RUNNER_TEMP/latest-apk-assets.tsv"
 
       - name: 发布 ${{ matrix.platform_name }} 最新整合包
@@ -334,7 +344,8 @@ jobs:
               --dir "$bundle_dir"
           done < "$RUNNER_TEMP/latest-apk-assets.tsv"
 
-          mapfile -t apk_files < <(find "$bundle_dir" -maxdepth 1 -type f -name '*.apk')
+          find "$bundle_dir" -maxdepth 1 -type f -name '*.apk' > "$RUNNER_TEMP/bundle-apks.txt"
+          mapfile -t apk_files < "$RUNNER_TEMP/bundle-apks.txt"
           (( ${#apk_files[@]} > 0 ))
           (
             cd "$bundle_dir"
@@ -345,6 +356,10 @@ jobs:
           release_id="$(gh api \
             "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
             --jq '.id')"
+          assets_file="$RUNNER_TEMP/release-assets.tsv"
+          gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
+            --jq '.[] | [.id, .name] | @tsv' > "$assets_file"
 
           # Upload the replacement before deleting the previous bundle so a transient
           # release API failure cannot leave the platform without an aggregate ZIP.
@@ -356,11 +371,7 @@ jobs:
                "$asset_name" != "$ARCHIVE_NAME" ]] || continue
             gh api --method DELETE \
               "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
-          done < <(
-            gh api --paginate \
-              "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
-              --jq '.[] | [.id, .name] | @tsv'
-          )
+          done < "$assets_file"
           echo "### 已发布：$ARCHIVE_NAME" >> "$GITHUB_STEP_SUMMARY"
 
   cleanup:

@@ -113,15 +113,27 @@ versioned_url() {
 
 install_rule_set() {
 	local source_file="$1" version="$2" resource="$3"
-	local stage_dir="$RESOURCES_DIR/.update.$$.tmp"
+	local stage_dir="$RESOURCES_DIR/.update.$$.tmp/$resource"
 
 	mkdir -p "$stage_dir" &&
 		cp "$source_file" "$stage_dir/$resource.srs" &&
 		printf '%s\n' "$version" > "$stage_dir/$resource.ver" &&
-		chmod 0644 "$stage_dir/$resource.srs" "$stage_dir/$resource.ver" &&
-		mv -f "$stage_dir/$resource.srs" "$RESOURCES_DIR/$resource.srs" || return 1
-	mark_updated "$resource"
-	mv -f "$stage_dir/$resource.ver" "$RESOURCES_DIR/$resource.ver"
+		chmod 0644 "$stage_dir/$resource.srs" "$stage_dir/$resource.ver" || return 1
+	if [ -e "$RESOURCES_DIR/$resource.srs" ]; then
+		cp -p "$RESOURCES_DIR/$resource.srs" "$stage_dir/$resource.srs.old" || return 1
+	fi
+	mv -f "$stage_dir/$resource.srs" "$RESOURCES_DIR/$resource.srs" || return 1
+	if ! mv -f "$stage_dir/$resource.ver" "$RESOURCES_DIR/$resource.ver"; then
+		if [ -f "$stage_dir/$resource.srs.old" ]; then
+			if ! mv -f "$stage_dir/$resource.srs.old" "$RESOURCES_DIR/$resource.srs"; then
+				RESOURCE_RESTORE_FAILED=1
+				printf 'Failed to restore %s; backup retained at %s.\n' "$resource" "$stage_dir" >&2
+			fi
+		else
+			rm -f "$RESOURCES_DIR/$resource.srs" || RESOURCE_RESTORE_FAILED=1
+		fi
+		return 1
+	fi
 }
 
 update_rule_set() {
@@ -150,6 +162,7 @@ update_rule_set() {
 		log "[$resource] Update failed while installing the rule set."
 		return 1
 	fi
+	mark_updated "$resource"
 	log "[$resource] Successfully updated."
 }
 
@@ -219,7 +232,8 @@ TMP_DIR="$(mktemp -d "$RUN_DIR/resources-update.XXXXXX")" || {
 	finish 1
 }
 DASHBOARD_STAGE="${DASHBOARD_DIR}.new.$$"
-trap 'rm -rf "$TMP_DIR" "$DASHBOARD_STAGE" "$RESOURCES_DIR/.update.$$.tmp"' EXIT
+RESOURCE_RESTORE_FAILED=0
+trap 'rm -rf "$TMP_DIR" "$DASHBOARD_STAGE"; [ "$RESOURCE_RESTORE_FAILED" -ne 0 ] || rm -rf "$RESOURCES_DIR/.update.$$.tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 

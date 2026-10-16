@@ -39,7 +39,7 @@ normalize_source_url() {
 package_source_url() {
 	local package_dir="$1"
 	local makefile="$CI_REPO_ROOT/$package_dir/Makefile"
-	local override source_url package_url go_pkg sibling dependency
+	local override source_url package_url go_pkg sibling dependency dependencies
 
 	override="$(source_override "$package_dir")"
 	[[ -z "$override" ]] || {
@@ -53,12 +53,19 @@ package_source_url() {
 			package_source_url "$sibling"
 			return
 		fi
+		dependencies="$(awk '{
+			while (match($0, /\+[A-Za-z0-9._+-]+/)) {
+				print substr($0, RSTART + 1, RLENGTH - 1)
+				$0 = substr($0, RSTART + RLENGTH)
+			}
+		}' "$makefile" | sort -u)" || return 1
 		while IFS= read -r dependency; do
+			[[ -n "$dependency" ]] || continue
 			if [[ -f "$CI_REPO_ROOT/$dependency/Makefile" ]]; then
 				package_source_url "$dependency"
 				return
 			fi
-		done < <(grep -oE '\+[A-Za-z0-9._+-]+' "$makefile" | sed 's/^+//' | sort -u)
+		done <<< "$dependencies"
 	fi
 
 	source_url="$(sed -n 's/^PKG_SOURCE_URL:=//p' "$makefile" | head -n1)"
@@ -121,7 +128,8 @@ plugin_description() {
 	esac
 }
 
-mapfile -t package_dirs < <(ci_discover_packages)
+ci_discover_packages > "$temp_file"
+mapfile -t package_dirs < "$temp_file"
 
 {
 	echo '# 高质量<免费>交流群'

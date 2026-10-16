@@ -1,14 +1,13 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=axonhub
-PKG_UPSTREAM_VERSION:=unstable-20261015
-PKG_VERSION:=20261015
+PKG_VERSION:=20261016
 PKG_RELEASE:=1
-PKG_SOURCE_VERSION:=1c695ac32a9aceb32dd0364d2dd7b4076586d0b6
+PKG_SOURCE_VERSION:=a946fca495c52344ed073abb6c3562b9ff728b12
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_SOURCE_VERSION).tar.gz
 PKG_SOURCE_URL:=https://codeload.github.com/looplj/axonhub/tar.gz/$(PKG_SOURCE_VERSION)?
-PKG_HASH:=0895329950fe9ee217dbdb34cb6c9c272cc2133cb1dbb26bc30158a3c3f69037
+PKG_HASH:=d767de4e917e3f62de6c71d2b37a1e9865ac835b89fa24aeeb714a5282d65524
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_SOURCE_VERSION)
 
 PKG_LICENSE:=Apache-2.0 AND LGPL-3.0-only
@@ -22,7 +21,7 @@ PKG_BUILD_FLAGS:=no-mips16
 GO_PKG:=github.com/looplj/axonhub
 GO_PKG_BUILD_PKG:=$(GO_PKG)/cmd/axonhub
 GO_PKG_LDFLAGS_X:= \
-	$(GO_PKG)/internal/build.Version=$(PKG_UPSTREAM_VERSION)-r$(PKG_RELEASE) \
+	$(GO_PKG)/internal/build.Version=$(PKG_VERSION)-r$(PKG_RELEASE) \
 	$(GO_PKG)/internal/build.Commit=$(PKG_SOURCE_VERSION)
 GO_PKG_TAGS:=nomsgpack
 
@@ -33,7 +32,7 @@ define Package/$(PKG_NAME)
   SECTION:=net
   CATEGORY:=Network
   SUBMENU:=Web Servers/Proxies
-  TITLE:=AxonHub AI gateway ($(PKG_UPSTREAM_VERSION))
+  TITLE:=AxonHub AI gateway ($(PKG_VERSION))
   URL:=https://github.com/looplj/axonhub
   DEPENDS:=@(aarch64||x86_64||loongarch64) +ca-bundle +zoneinfo-core +zoneinfo-asia
 endef

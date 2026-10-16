@@ -69,6 +69,41 @@ jobs:
         run: |
           .github/scripts/maintain-repository.sh
           .github/scripts/rescan-translations.sh
+
+          source .github/scripts/ci-common.sh
+          ci_discover_packages > "$RUNNER_TEMP/maintenance-packages.txt"
+          while IFS= read -r package_dir; do
+            [[ "$package_dir" == luci-app-* ]] || continue
+            git diff --name-only -- "$package_dir" > "$RUNNER_TEMP/maintenance-changed-files.txt"
+            package_changed=false
+            while IFS= read -r path; do
+              case "$path" in
+                "$package_dir"/htdocs/*|"$package_dir"/luasrc/*|"$package_dir"/root/*|"$package_dir"/po/*.po)
+                  package_changed=true
+                  break
+                  ;;
+              esac
+            done < "$RUNNER_TEMP/maintenance-changed-files.txt"
+            [[ "$package_changed" == true ]] || continue
+
+            makefile="$package_dir/Makefile"
+            package_version="$(TZ=Asia/Shanghai date +%Y%m%d)"
+            current_version="$(sed -n 's/^PKG_VERSION:=//p' "$makefile")"
+            current_release="$(sed -n 's/^PKG_RELEASE:=//p' "$makefile")"
+            release=1
+            if [[ "$current_version" == "$package_version" ]]; then
+              [[ "$current_release" =~ ^[0-9]+$ ]]
+              release=$((current_release + 1))
+            fi
+
+            sed -i \
+              -e "s/^PKG_VERSION:=.*/PKG_VERSION:=$package_version/" \
+              -e "s/^PKG_RELEASE:=.*/PKG_RELEASE:=$release/" \
+              "$makefile"
+            grep -Fx "PKG_VERSION:=$package_version" "$makefile"
+            grep -Fx "PKG_RELEASE:=$release" "$makefile"
+          done < "$RUNNER_TEMP/maintenance-packages.txt"
+          .github/scripts/generate-readme.sh
           git diff --check
 
       - name: 提交维护结果

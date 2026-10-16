@@ -13,7 +13,10 @@ cd "$REPO_ROOT"
 if (( $# > 0 )); then
 	PACKAGE_DIRS=("$@")
 else
-	mapfile -t PACKAGE_DIRS < <(ci_discover_packages)
+	temp_file="$(mktemp)"
+	trap 'rm -f -- "$temp_file"' EXIT
+	ci_discover_packages > "$temp_file"
+	mapfile -t PACKAGE_DIRS < "$temp_file"
 fi
 
 for package_dir in "${PACKAGE_DIRS[@]}"; do

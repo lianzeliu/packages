@@ -10,15 +10,13 @@ The initialized cleanup state contains all five resources; use their
 configured values directly when opening manual cleanup instead of
 substituting unrelated runtime retention values.
 
-Base-Commit: 7a0cfbf42b00829dd8811cc87488f6194ed5ae02
+Base-Commit: a946fca495c52344ed073abb6c3562b9ff728b12
 
 ---
 
-diff --git a/frontend/src/features/system/components/storage-policy-settings.tsx b/frontend/src/features/system/components/storage-policy-settings.tsx
-index 7b16235..bba18e2 100644
 --- a/frontend/src/features/system/components/storage-policy-settings.tsx
 +++ b/frontend/src/features/system/components/storage-policy-settings.tsx
-@@ -94,11 +94,11 @@ function groupBodyPreviewItems(items: GcCleanupPreviewItem[]): BodyPreviewGroup[
+@@ -94,11 +94,11 @@ function groupBodyPreviewItems(items: Gc
  }
  
  const DEFAULT_CLEANUP_OPTIONS: CleanupOption[] = [
@@ -44,7 +42,7 @@ index 7b16235..bba18e2 100644
    }
  
    return options.map((option) => (option.resourceType === resourceType ? { ...option, ...patch } : option));
-@@ -146,11 +146,11 @@ export function StoragePolicySettings() {
+@@ -146,11 +146,11 @@ export function StoragePolicySettings()
      cleanupOptions: ensureCleanupOptions(storagePolicy?.cleanupOptions ?? []),
    });
  
@@ -61,7 +59,7 @@ index 7b16235..bba18e2 100644
    const [previewItems, setPreviewItems] = useState<GcCleanupPreviewItem[]>([]);
    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
    const [previewFailed, setPreviewFailed] = useState(false);
-@@ -256,11 +256,11 @@ export function StoragePolicySettings() {
+@@ -256,11 +256,11 @@ export function StoragePolicySettings()
      }
  
      {
@@ -78,11 +76,9 @@ index 7b16235..bba18e2 100644
        setManualRequestsDays(reqDays);
        setManualUsageLogsDays(usageDays);
        setManualRequestBodiesDays(requestBodyDays);
-diff --git a/internal/server/biz/system_default.go b/internal/server/biz/system_default.go
-index f04ae31..b095155 100644
 --- a/internal/server/biz/system_default.go
 +++ b/internal/server/biz/system_default.go
-@@ -12,28 +12,28 @@ func defaultCleanupOptions() []CleanupOption {
+@@ -12,28 +12,28 @@ func defaultCleanupOptions() []CleanupOp
  	return []CleanupOption{
  		{
  			ResourceType: CleanupResourceRequests,
@@ -121,11 +117,9 @@ index f04ae31..b095155 100644
  		},
  	}
  }
-diff --git a/internal/server/biz/system_test.go b/internal/server/biz/system_test.go
-index 2d90cf8..97bc756 100644
 --- a/internal/server/biz/system_test.go
 +++ b/internal/server/biz/system_test.go
-@@ -823,13 +823,13 @@ func TestMergeCleanupOptions(t *testing.T) {
+@@ -823,13 +823,13 @@ func TestMergeCleanupOptions(t *testing.
  		}
  
  		if opt.ResourceType == CleanupResourceRequestBodies {

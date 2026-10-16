@@ -2,6 +2,7 @@
 
 # Pick the largest writable persistent filesystem suitable for SQLite.
 best_blocks=0
+best_free=0
 best_mount=''
 
 while read -r device mountpoint fstype options rest; do
@@ -11,10 +12,17 @@ while read -r device mountpoint fstype options rest; do
 	esac
 
 	case "$mountpoint" in
-		/|/rom|/overlay|/boot|/tmp|/tmp/*|/var|/var/*) continue ;;
+		/|/rom|/rom/*|/overlay|/boot|/tmp|/tmp/*|/var|/var/*|/proc|/proc/*|/sys|/sys/*|/dev|/dev/*) continue ;;
 	esac
 	case "$mountpoint" in
-		*..*|*[!A-Za-z0-9_./-]*) continue ;;
+		''|*[!A-Za-z0-9_./-]*) continue ;;
+	esac
+	case "$mountpoint" in
+		/*) ;;
+		*) continue ;;
+	esac
+	case "$mountpoint/" in
+		*/../*|*/./*|*//*) continue ;;
 	esac
 
 	case ",$options," in
@@ -23,6 +31,8 @@ while read -r device mountpoint fstype options rest; do
 
 	[ -d "$mountpoint" ] && [ -w "$mountpoint" ] || continue
 
+	# df emits numeric fields; splitting the two selected fields is intentional.
+	# shellcheck disable=SC2046
 	set -- $(df -Pk "$mountpoint" 2>/dev/null | awk 'END { print $2, $4 }')
 	total_blocks="${1:-0}"
 	free_blocks="${2:-0}"
@@ -34,8 +44,10 @@ while read -r device mountpoint fstype options rest; do
 	# Do not select tiny boot/config partitions.
 	[ "$free_blocks" -ge 262144 ] 2>/dev/null || continue
 
-	if [ "$total_blocks" -gt "$best_blocks" ] 2>/dev/null; then
+	if [ "$total_blocks" -gt "$best_blocks" ] 2>/dev/null ||
+	   { [ "$total_blocks" -eq "$best_blocks" ] && [ "$free_blocks" -gt "$best_free" ]; }; then
 		best_blocks="$total_blocks"
+		best_free="$free_blocks"
 		best_mount="$mountpoint"
 	fi
 done < /proc/mounts

@@ -1,9 +1,9 @@
 #!/bin/sh
 
-output=file
+output='file'
 
 if [ "${1:-}" = '--syslog' ]; then
-	output=syslog
+	output='syslog'
 	shift
 else
 	log_file="$1"

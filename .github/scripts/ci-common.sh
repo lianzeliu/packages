@@ -31,9 +31,19 @@ ci_discover_packages() {
 ci_make_value() {
 	local package_dir="$1"
 	local variable="$2"
+	local makefile="$CI_REPO_ROOT/$package_dir/Makefile"
+	local value
 
-	sed -n "s/^${variable}:=//p" "$CI_REPO_ROOT/$package_dir/Makefile" |
-		head -n1
+	value="$(sed -n "s/^${variable}:=//p" "$makefile" | head -n1)"
+	if [[ "$variable" == PKG_VERSION && "$value" == *"\$("* ]]; then
+		# Evaluate version expressions without loading the OpenWrt build includes.
+		{
+			awk '/^PKG_(NAME|UPSTREAM_VERSION|VERSION|RELEASE):=/' "$makefile"
+			printf "\nci-print-version:\n\t@printf '%%s\\\\n' '\$(PKG_VERSION)'\n"
+		} | make --no-print-directory -rRs -f - ci-print-version
+	else
+		printf '%s\n' "$value"
+	fi
 }
 
 ci_package_name() {
@@ -115,6 +125,7 @@ ci_commit_and_push() {
 	local message="$2"
 	local base_sha commit_sha local_head remote_head pushed_head
 	local packages_csv packages_display
+	local changed_paths package_paths path
 	local removed_package=false
 	local -a changed_files package_dirs
 	shift 2
@@ -150,10 +161,13 @@ ci_commit_and_push() {
 		return 0
 	fi
 	git diff --cached --check
-	mapfile -t changed_files < <(git diff --cached --name-only)
-	mapfile -t package_dirs < <(
-		printf '%s\n' "${changed_files[@]}" | ci_packages_from_paths
-	)
+	changed_paths="$(git diff --cached --name-only)" || return 1
+	mapfile -t changed_files <<< "$changed_paths"
+	package_paths="$(printf '%s\n' "${changed_files[@]}" | ci_packages_from_paths)" || return 1
+	package_dirs=()
+	if [[ -n "$package_paths" ]]; then
+		mapfile -t package_dirs <<< "$package_paths"
+	fi
 	for path in "${changed_files[@]}"; do
 		if [[ "$path" == */Makefile && "$path" != */*/* && \
 			"${path%%/*}" != .* && ! -f "$CI_REPO_ROOT/$path" ]]; then
@@ -162,7 +176,11 @@ ci_commit_and_push() {
 		fi
 	done
 	if [[ "$removed_package" == true ]]; then
-		mapfile -t package_dirs < <(ci_discover_packages)
+		package_paths="$(ci_discover_packages)" || return 1
+		package_dirs=()
+		if [[ -n "$package_paths" ]]; then
+			mapfile -t package_dirs <<< "$package_paths"
+		fi
 	fi
 	if (( ${#package_dirs[@]} > 0 )); then
 		packages_csv="$(ci_join_csv "${package_dirs[@]}")"
@@ -191,17 +209,6 @@ ci_commit_and_push() {
 	ci_write_output packages_display "$packages_display"
 }
 
-ci_tag_matches_prefix() {
-	local tag="$1"
-	shift
-	local prefix
-
-	for prefix in "$@"; do
-		[[ "$tag" == "$prefix"* ]] && return 0
-	done
-	return 1
-}
-
 ci_delete_release_and_tag() {
 	local tag="$1"
 
@@ -219,31 +226,4 @@ ci_delete_release_and_tag() {
 		gh api --method DELETE \
 			"repos/$GITHUB_REPOSITORY/git/refs/tags/$tag"
 	fi
-}
-
-ci_prune_releases() {
-	local keep_tag="$1"
-	shift
-	local tag
-
-	: "${GH_TOKEN:?GH_TOKEN is required}"
-	: "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
-
-	while IFS= read -r tag; do
-		[[ -n "$tag" && "$tag" != "$keep_tag" ]] || continue
-		ci_tag_matches_prefix "$tag" "$@" || continue
-		ci_delete_release_and_tag "$tag"
-	done < <(
-		gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 \
-			--json tagName --jq '.[].tagName'
-	)
-
-	while IFS= read -r tag; do
-		[[ -n "$tag" && "$tag" != "$keep_tag" ]] || continue
-		ci_tag_matches_prefix "$tag" "$@" || continue
-		ci_delete_release_and_tag "$tag"
-	done < <(
-		git ls-remote --tags "https://github.com/$GITHUB_REPOSITORY.git" |
-			awk -F 'refs/tags/' 'NF == 2 && $2 !~ /\^\{\}$/ { print $2 }'
-	)
 }

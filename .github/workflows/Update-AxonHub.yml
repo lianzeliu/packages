@@ -78,7 +78,6 @@ jobs:
           {
             echo "changed=$changed"
             echo "commit=$upstream_commit"
-            echo "branch=$upstream_branch"
           } >> "$GITHUB_OUTPUT"
 
       - name: 下载并校验 AxonHub 源码与补丁
@@ -109,12 +108,10 @@ jobs:
         if: steps.upstream.outputs.changed == 'true'
         env:
           SOURCE_HASH: ${{ steps.source.outputs.hash }}
-          UPSTREAM_BRANCH: ${{ steps.upstream.outputs.branch }}
           UPSTREAM_COMMIT: ${{ steps.upstream.outputs.commit }}
         run: |
           makefile='axonhub/Makefile'
           package_version="$(TZ=Asia/Shanghai date +%Y%m%d)"
-          upstream_version="${UPSTREAM_BRANCH}-${package_version}"
           current_version="$(sed -n 's/^PKG_VERSION:=//p' "$makefile")"
           current_release="$(sed -n 's/^PKG_RELEASE:=//p' "$makefile")"
           release=1
@@ -124,14 +121,12 @@ jobs:
           fi
 
           sed -i \
-            -e "s/^PKG_UPSTREAM_VERSION:=.*/PKG_UPSTREAM_VERSION:=$upstream_version/" \
             -e "s/^PKG_VERSION:=.*/PKG_VERSION:=$package_version/" \
             -e "s/^PKG_RELEASE:=.*/PKG_RELEASE:=$release/" \
             -e "s/^PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$UPSTREAM_COMMIT/" \
             -e "s/^PKG_HASH:=.*/PKG_HASH:=$SOURCE_HASH/" \
             "$makefile"
 
-          grep -Fx "PKG_UPSTREAM_VERSION:=$upstream_version" "$makefile"
           grep -Fx "PKG_VERSION:=$package_version" "$makefile"
           grep -Fx "PKG_RELEASE:=$release" "$makefile"
           grep -Fx "PKG_SOURCE_VERSION:=$UPSTREAM_COMMIT" "$makefile"
@@ -146,11 +141,11 @@ jobs:
         run: |
           source .github/scripts/ci-common.sh
           makefile='axonhub/Makefile'
-          upstream_version="$(sed -n 's/^PKG_UPSTREAM_VERSION:=//p' "$makefile")"
+          package_version="$(sed -n 's/^PKG_VERSION:=//p' "$makefile")"
           release="$(sed -n 's/^PKG_RELEASE:=//p' "$makefile")"
           ci_commit_and_push \
             "$PACKAGE_BRANCH" \
-            "chore: 更新 AxonHub 至 ${upstream_version}-r${release}" \
+            "chore: 更新 AxonHub 至 ${package_version}-r${release}" \
             "$makefile"
 
   build:

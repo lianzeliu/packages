@@ -8,12 +8,10 @@ multi-connection WAL configuration and update the required module sums.
 
 Reference: https://www.sqlite.org/wal.html#walresetbug
 
-Base-Commit: 7a0cfbf42b00829dd8811cc87488f6194ed5ae02
+Base-Commit: a946fca495c52344ed073abb6c3562b9ff728b12
 
 ---
 
-diff --git a/go.mod b/go.mod
-index 4dbff78..8bec905 100644
 --- a/go.mod
 +++ b/go.mod
 @@ -76,7 +76,7 @@ require (
@@ -34,11 +32,9 @@ index 4dbff78..8bec905 100644
  	modernc.org/mathutil v1.7.1 // indirect
  	modernc.org/memory v1.11.0 // indirect
  )
-diff --git a/go.sum b/go.sum
-index 91be1c8..6a6f96f 100644
 --- a/go.sum
 +++ b/go.sum
-@@ -1121,18 +1121,18 @@ honnef.co/go/tools v0.0.0-20190523083050-ea95bdfd59fc/go.mod h1:rf3lG4BRIbNafJWh
+@@ -1121,18 +1121,18 @@ honnef.co/go/tools v0.0.0-20190523083050
  honnef.co/go/tools v0.0.1-2019.2.3/go.mod h1:a3bituU0lyd329TUQxRnasdCoJDkEUEAqEt0JzvZhAg=
  modernc.org/cc/v4 v4.27.1 h1:9W30zRlYrefrDV2JE2O8VDtJ1yPGownxciz5rrbQZis=
  modernc.org/cc/v4 v4.27.1/go.mod h1:uVtb5OGqUKpoLWhqwNQo/8LwvoiEBLvZXIQ/SmO6mL0=
@@ -65,7 +61,7 @@ index 91be1c8..6a6f96f 100644
  modernc.org/mathutil v1.7.1 h1:GCZVGXdaN8gTqB1Mf/usp1Y/hSqgI2vAGGP4jZMCxOU=
  modernc.org/mathutil v1.7.1/go.mod h1:4p5IwJITfppl0G4sUEDtCr4DthTaT47/N3aT6MhfgJg=
  modernc.org/memory v1.11.0 h1:o4QC8aMQzmcwCK3t3Ux/ZHmwFPzE6hf2Y5LbkRs+hbI=
-@@ -1141,8 +1141,8 @@ modernc.org/opt v0.1.4 h1:2kNGMRiUjrp4LcaPuLY2PzUfqM/w9N23quVwhKt5Qm8=
+@@ -1141,8 +1141,8 @@ modernc.org/opt v0.1.4 h1:2kNGMRiUjrp4Lc
  modernc.org/opt v0.1.4/go.mod h1:03fq9lsNfvkYSfxrfUhZCWPk1lm4cq4N+Bh//bEtgns=
  modernc.org/sortutil v1.2.1 h1:+xyoGf15mM3NMlPDnFqrteY07klSFxLElE2PVuWIJ7w=
  modernc.org/sortutil v1.2.1/go.mod h1:7ZI3a3REbai7gzCLcotuw9AC4VZVpYMjDzETGsSMqJE=

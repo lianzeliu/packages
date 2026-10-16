@@ -18,6 +18,7 @@ var callServiceList = rpc.declare({
 var callStatus = rpc.declare({
 	object: 'luci.gecoosac',
 	method: 'status',
+	params: [ 'pid' ],
 	expect: { '': {} }
 });
 
@@ -170,23 +171,20 @@ function renderStatus(status) {
 }
 
 function getStatus() {
-	return Promise.all([
-		L.resolveDefault(callStatus(), {}),
-		L.resolveDefault(callServiceList('gecoosac'), {})
-	]).then(function(data) {
-		var status = data[0] || {};
-		var services = data[1] || {};
+	return L.resolveDefault(callServiceList('gecoosac'), {}).then(function(services) {
 		var instance = services.gecoosac && services.gecoosac.instances && services.gecoosac.instances.gecoosac;
-		var processRunning = !!status.running;
 		var managedRunning = !!(instance && instance.running);
 
-		status.unmanaged = processRunning && !managedRunning;
-		status.running = managedRunning || processRunning;
+		return L.resolveDefault(callStatus(managedRunning ? instance.pid : 0), {}).then(function(status) {
+			var processRunning = !!status.running;
 
-		if (!status.pid && instance && instance.pid)
-			status.pid = instance.pid;
+			status.unmanaged = processRunning && !managedRunning;
+			status.running = managedRunning || processRunning;
+			if (!status.pid && managedRunning && instance.pid)
+				status.pid = instance.pid;
 
-		return status;
+			return status;
+		});
 	});
 }
 

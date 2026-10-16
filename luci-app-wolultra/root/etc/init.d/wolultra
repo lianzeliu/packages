@@ -138,7 +138,7 @@ rebuild_crontab() {
 	local mode="${1:-config}"
 	local tmp changed=0
 
-	mkdir -p "$(dirname "$CRON_FILE")" /var/lock || return 1
+	mkdir -p "$(dirname "$CRON_FILE")" "$(dirname "$CRON_LOCK")" || return 1
 	lock "$CRON_LOCK" || return 1
 	tmp="$(mktemp "$(dirname "$CRON_FILE")/.wolultra-cron.XXXXXX")" || {
 		lock -u "$CRON_LOCK"
@@ -181,7 +181,7 @@ rebuild_crontab() {
 		}
 		changed=1
 	fi
-	lock -u "$CRON_LOCK"
+	lock -u "$CRON_LOCK" || return 1
 
 	[ "$changed" -eq 0 ] || reload_cron
 }

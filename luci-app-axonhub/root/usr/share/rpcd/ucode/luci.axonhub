@@ -23,7 +23,10 @@ const ignoredMounts = {
 	'/overlay': true,
 	'/boot': true,
 	'/tmp': true,
-	'/var': true
+	'/var': true,
+	'/proc': true,
+	'/sys': true,
+	'/dev': true
 };
 
 function decode_mount_path(path) {
@@ -40,19 +43,21 @@ function storage_mounts() {
 			continue;
 
 		let path = decode_mount_path(fields[1]);
-		if (!match(path, /^\/[A-Za-z0-9_.\/-]+$/) || match(path, /(^|\/)\.\.(\/|$)/) ||
-		    ignoredMounts[path] || match(',' + fields[3] + ',', /,ro,/))
+		if (!match(path, /^\/[A-Za-z0-9_.\/-]+$/) || match(path, /(^|\/)\.{1,2}(\/|$)|\/\/|\/$/) ||
+		    ignoredMounts[path] || match(path, /^\/(rom|tmp|var|proc|sys|dev)\//) ||
+		    match(',' + fields[3] + ',', /,ro,/))
 			continue;
 
 		let stats = statvfs(path);
-		if (!stats || stats.freesize < 268435456 || !access(path, 'w'))
+		const available = stats ? stats.frsize * stats.bavail : 0;
+		if (!stats || available < 268435456 || !access(path, 'w'))
 			continue;
 
 		push(mounts, {
 			path: path,
 			type: fields[2],
 			total: stats.totalsize,
-			free: stats.freesize
+			free: available
 		});
 	}
 
@@ -66,22 +71,27 @@ function storage_mounts() {
 	return mounts;
 }
 
-function process_status() {
+function process_status(managed_pid) {
 	let result = {
 		exists: !!access(binpath, 'x'),
 		running: false
 	};
-	let pid = 0;
+	let pid = int(managed_pid) || 0;
+	const target = pid > 0 ? readlink(`/proc/${pid}/exe`) : null;
+	if (target !== binpath && target !== binpath + ' (deleted)')
+		pid = 0;
 
-	for (let path in glob('/proc/[0-9]*/exe')) {
-		let target = readlink(path);
-		if (target != binpath && target != binpath + ' (deleted)')
-			continue;
+	if (!pid) {
+		for (let path in glob('/proc/[0-9]*/exe')) {
+			let target = readlink(path);
+			if (target != binpath && target != binpath + ' (deleted)')
+				continue;
 
-		let fields = match(path, /^\/proc\/([0-9]+)\/exe$/);
-		if (fields) {
-			pid = +fields[1];
-			break;
+			let fields = match(path, /^\/proc\/([0-9]+)\/exe$/);
+			if (fields) {
+				pid = +fields[1];
+				break;
+			}
 		}
 	}
 
@@ -119,8 +129,9 @@ function binary_version() {
 
 const methods = {
 	status: {
-		call: function() {
-			return process_status();
+		args: { pid: 0 },
+		call: function(request) {
+			return process_status(request.args.pid);
 		}
 	},
 

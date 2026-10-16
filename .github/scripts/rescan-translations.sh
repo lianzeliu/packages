@@ -10,8 +10,10 @@ LUCI_I18N_BRANCH='master'
 LUCI_I18N_DIR="${LUCI_I18N_DIR:-}"
 TEMP_DIR=""
 POT_TEMP=""
+LIST_TEMP="$(mktemp)"
 
 cleanup() {
+	rm -f -- "$LIST_TEMP"
 	[[ -z "$POT_TEMP" ]] || rm -f -- "$POT_TEMP"
 	[[ -z "$TEMP_DIR" ]] || rm -rf -- "$TEMP_DIR"
 }
@@ -46,7 +48,8 @@ cd "$REPO_ROOT"
 if (( $# > 0 )); then
 	PACKAGE_DIRS=("$@")
 else
-	mapfile -t PACKAGE_DIRS < <(ci_discover_packages)
+	ci_discover_packages > "$LIST_TEMP"
+	mapfile -t PACKAGE_DIRS < "$LIST_TEMP"
 fi
 
 for package_dir in "${PACKAGE_DIRS[@]}"; do
@@ -59,10 +62,9 @@ for package_dir in "${PACKAGE_DIRS[@]}"; do
 
 	templates=()
 	if [[ -d "$package_dir/po/templates" ]]; then
-		mapfile -t templates < <(
-			find "$package_dir/po/templates" -maxdepth 1 -type f -name '*.pot' -print |
-				sort
-		)
+		find "$package_dir/po/templates" -maxdepth 1 -type f -name '*.pot' -print |
+			sort > "$LIST_TEMP"
+		mapfile -t templates < "$LIST_TEMP"
 	fi
 	case "${#templates[@]}" in
 		0)
@@ -111,6 +113,7 @@ for package_dir in "${PACKAGE_DIRS[@]}"; do
 
 	perl "$UPDATE_SCRIPT" "$package_dir/po"
 	find "$package_dir/po" -type f -name '*.po~' -delete
+	find "$package_dir/po" -type f -name '*.po' -print0 > "$LIST_TEMP"
 	while IFS= read -r -d '' po_file; do
 		msgattrib --no-obsolete -o "$po_file" "$po_file"
 		msgfmt --check -o /dev/null "$po_file"
@@ -130,7 +133,7 @@ for package_dir in "${PACKAGE_DIRS[@]}"; do
 			echo "Untranslated message found: $po_file" >&2
 			exit 1
 		fi
-	done < <(find "$package_dir/po" -type f -name '*.po' -print0)
+	done < "$LIST_TEMP"
 
 	echo "Updated translations: $package_dir"
 done

@@ -11,12 +11,10 @@ files on failure and preserve the previously published file until rename.
 Propagate streaming Close failures. Add explicit local directory removal
 for whole-record GC while preserving the other storage backend paths.
 
-Base-Commit: 7a0cfbf42b00829dd8811cc87488f6194ed5ae02
+Base-Commit: a946fca495c52344ed073abb6c3562b9ff728b12
 
 ---
 
-diff --git a/internal/server/biz/data_storage.go b/internal/server/biz/data_storage.go
-index c8f4a71..f2c9274 100644
 --- a/internal/server/biz/data_storage.go
 +++ b/internal/server/biz/data_storage.go
 @@ -1,6 +1,7 @@
@@ -27,7 +25,7 @@ index c8f4a71..f2c9274 100644
  	"context"
  	"crypto/tls"
  	"errors"
-@@ -576,10 +577,8 @@ func (s *DataStorageService) SaveData(ctx context.Context, ds *ent.DataStorage,
+@@ -576,10 +577,8 @@ func (s *DataStorageService) SaveData(ct
  
  		if ds.Type == datastorage.TypeFs {
  			key = filepath.FromSlash(key)
@@ -40,7 +38,7 @@ index c8f4a71..f2c9274 100644
  		} else if ds.Type == datastorage.TypeWebdav {
  			// For WebDAV, remove leading slash to avoid 405 error on some servers (e.g., Synology)
  			key = strings.TrimPrefix(key, "/")
-@@ -640,9 +639,11 @@ func (s *DataStorageService) SaveDataFromReader(ctx context.Context, ds *ent.Dat
+@@ -640,9 +639,11 @@ func (s *DataStorageService) SaveDataFro
  
  		if ds.Type == datastorage.TypeFs {
  			key = filepath.FromSlash(key)
@@ -54,7 +52,7 @@ index c8f4a71..f2c9274 100644
  		} else if ds.Type == datastorage.TypeWebdav {
  			// For WebDAV, remove leading slash to avoid 405 error on some servers (e.g., Synology)
  			key = strings.TrimPrefix(key, "/")
-@@ -660,13 +661,15 @@ func (s *DataStorageService) SaveDataFromReader(ctx context.Context, ds *ent.Dat
+@@ -660,13 +661,15 @@ func (s *DataStorageService) SaveDataFro
  		if err != nil {
  			return "", 0, fmt.Errorf("failed to create file: %w, key: %s", err, key)
  		}
@@ -72,7 +70,7 @@ index c8f4a71..f2c9274 100644
  		return key, n, nil
  	default:
  		return "", 0, fmt.Errorf("unsupported storage type: %s", ds.Type)
-@@ -717,6 +720,69 @@ func (s *DataStorageService) DeleteData(ctx context.Context, ds *ent.DataStorage
+@@ -717,6 +720,69 @@ func (s *DataStorageService) DeleteData(
  	}
  }
  

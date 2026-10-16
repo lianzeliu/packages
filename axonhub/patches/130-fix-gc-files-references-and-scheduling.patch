@@ -15,12 +15,10 @@ Share an admission lock across manual and scheduled GC. Bound cleanup
 with configurable batch size, cancellable pacing and timeout. Propagate
 cleanup errors, publish scheduler errors, and log completion and counts.
 
-Base-Commit: 7a0cfbf42b00829dd8811cc87488f6194ed5ae02
+Base-Commit: a946fca495c52344ed073abb6c3562b9ff728b12
 
 ---
 
-diff --git a/conf/conf.go b/conf/conf.go
-index 8579035..53706b6 100644
 --- a/conf/conf.go
 +++ b/conf/conf.go
 @@ -303,6 +303,9 @@ func setDefaults(v *viper.Viper) {
@@ -33,8 +31,6 @@ index 8579035..53706b6 100644
  
  	// Provider quota defaults
  	v.SetDefault("provider_quota.check_interval", "5m")
-diff --git a/config.example.yml b/config.example.yml
-index 759b8b8..4edfdd4 100644
 --- a/config.example.yml
 +++ b/config.example.yml
 @@ -169,6 +169,9 @@ gc:
@@ -47,8 +43,6 @@ index 759b8b8..4edfdd4 100644
    vacuum_enabled: false          # Enable VACUUM after cleanup (env: AXONHUB_GC_VACUUM_ENABLED)
                                   # Supported for SQLite and PostgreSQL
                                   # SQLite: Rebuilds database file to reclaim space
-diff --git a/internal/server/gc/gc.go b/internal/server/gc/gc.go
-index e83ad69..9d359e3 100644
 --- a/internal/server/gc/gc.go
 +++ b/internal/server/gc/gc.go
 @@ -2,7 +2,9 @@ package gc
@@ -100,7 +94,7 @@ index e83ad69..9d359e3 100644
  		Name:        "gc",
  		Description: "Garbage collection — cleanup old requests, stored bodies, traces, usage logs, and channel probes",
  		CronExpr:    w.Config.CRON,
-@@ -88,6 +97,9 @@ func (w *Worker) deleteInBatches(ctx context.Context, deleteFunc func() (int, er
+@@ -88,6 +97,9 @@ func (w *Worker) deleteInBatches(ctx con
  	totalDeleted := 0
  
  	for {
@@ -110,7 +104,7 @@ index e83ad69..9d359e3 100644
  		deleted, err := deleteFunc()
  		if err != nil {
  			return totalDeleted, fmt.Errorf("failed to delete batch: %w", err)
-@@ -106,140 +118,111 @@ func (w *Worker) deleteInBatches(ctx context.Context, deleteFunc func() (int, er
+@@ -106,140 +118,111 @@ func (w *Worker) deleteInBatches(ctx con
  
  // getBatchSize returns the appropriate batch size for cleanup operations.
  func (w *Worker) getBatchSize() int {
@@ -124,6 +118,9 @@ index e83ad69..9d359e3 100644
 -// When manual is true and manualDays is provided, those days override the policy values.
 -func (w *Worker) runCleanup(ctx context.Context, manual bool, manualDays map[string]int) {
 -	log.Info(ctx, "Starting cleanup process", log.Bool("manual", manual))
+-
+-	ctx = ent.NewContext(ctx, w.Ent)
+-	ctx = schematype.SkipSoftDelete(ctx)
 +// waitForBatch yields between batches and honors cancellation even when pacing is disabled.
 +func (w *Worker) waitForBatch(ctx context.Context, pause bool) error {
 +	if err := ctx.Err(); err != nil {
@@ -142,8 +139,6 @@ index e83ad69..9d359e3 100644
 +	}
 +}
  
--	ctx = ent.NewContext(ctx, w.Ent)
--	ctx = schematype.SkipSoftDelete(ctx)
 +// runCleanup shares one admission lock between scheduled and manual maintenance.
 +func (w *Worker) runCleanup(ctx context.Context, manual bool, manualDays map[string]int) error {
 +	if err := ctx.Err(); err != nil {
@@ -155,7 +150,7 @@ index e83ad69..9d359e3 100644
 +	defer w.cleanupMu.Unlock()
 +	return w.runCleanupLocked(ctx, manual, manualDays)
 +}
- 
++
 +func (w *Worker) runCleanupLocked(ctx context.Context, manual bool, manualDays map[string]int) (result error) {
 +	timeout := w.Config.Timeout
 +	if timeout <= 0 {
@@ -178,19 +173,11 @@ index e83ad69..9d359e3 100644
 -		log.Error(ctx, "Failed to get storage policy for cleanup", log.Cause(err))
 -		return
 +		return fmt.Errorf("get storage policy: %w", err)
-+	}
-+	run := func(resource string, days int, cleanup func() error) {
-+		if err := cleanup(); err != nil {
-+			result = errors.Join(result, fmt.Errorf("%s: %w", resource, err))
-+			log.Error(ctx, "Failed to cleanup resource", log.String("resource", resource), log.Cause(err))
-+		} else {
-+			log.Info(ctx, "Successfully cleaned up resource", log.String("resource", resource), log.Int("cleanup_days", days))
-+		}
  	}
 -
 -	log.Debug(ctx, "Storage policy for cleanup", log.Any("policy", policy))
 -
- 	for _, option := range policy.CleanupOptions {
+-	for _, option := range policy.CleanupOptions {
 -		if option.Enabled || manual {
 -			if manual && manualDays != nil {
 -				if _, ok := manualDays[option.ResourceType]; !ok {
@@ -284,20 +271,44 @@ index e83ad69..9d359e3 100644
 -			default:
 -				log.Warn(ctx, "Unknown resource type for cleanup",
 -					log.String("resource", option.ResourceType))
+-			}
++	run := func(resource string, days int, cleanup func() error) {
++		if err := cleanup(); err != nil {
++			result = errors.Join(result, fmt.Errorf("%s: %w", resource, err))
++			log.Error(ctx, "Failed to cleanup resource", log.String("resource", resource), log.Cause(err))
++		} else {
++			log.Info(ctx, "Successfully cleaned up resource", log.String("resource", resource), log.Int("cleanup_days", days))
+ 		}
+ 	}
+-
+-	err = w.cleanupChannelProbes(ctx, 3, manual)
+-	if err != nil {
+-		log.Error(ctx, "Failed to cleanup channel probes",
+-			log.Cause(err))
+-	} else {
+-		log.Info(ctx, "Successfully cleaned up channel probes",
+-			log.Int("cleanup_days", 3))
+-	}
+-
+-	if w.Config.VacuumEnabled {
+-		if err := w.runVacuum(ctx); err != nil {
+-			log.Error(ctx, "Failed to run VACUUM after cleanup",
+-				log.Cause(err))
++	for _, option := range policy.CleanupOptions {
 +		if err := ctx.Err(); err != nil {
 +			return errors.Join(result, err)
 +		}
 +		if !option.Enabled && !manual {
 +			continue
-+		}
+ 		}
 +		days := option.CleanupDays
 +		if manual && manualDays != nil {
 +			var ok bool
 +			days, ok = manualDays[option.ResourceType]
 +			if !ok {
 +				continue
- 			}
- 		}
++			}
++		}
 +		switch option.ResourceType {
 +		case biz.CleanupResourceRequestBodies:
 +			run(option.ResourceType, days, func() error { return w.cleanupRequestBodies(ctx, days) })
@@ -314,24 +325,10 @@ index e83ad69..9d359e3 100644
 +		default:
 +			result = errors.Join(result, fmt.Errorf("unknown cleanup resource: %s", option.ResourceType))
 +		}
- 	}
--
--	err = w.cleanupChannelProbes(ctx, 3, manual)
--	if err != nil {
--		log.Error(ctx, "Failed to cleanup channel probes",
--			log.Cause(err))
--	} else {
--		log.Info(ctx, "Successfully cleaned up channel probes",
--			log.Int("cleanup_days", 3))
++	}
 +	if err := ctx.Err(); err != nil {
 +		return errors.Join(result, err)
- 	}
--
--	if w.Config.VacuumEnabled {
--		if err := w.runVacuum(ctx); err != nil {
--			log.Error(ctx, "Failed to run VACUUM after cleanup",
--				log.Cause(err))
--		}
++	}
 +	run("channel_probes", 3, func() error { return w.cleanupChannelProbes(ctx, 3, manual) })
 +	if w.Config.VacuumEnabled && result == nil {
 +		run("vacuum", 0, func() error { return w.runVacuum(ctx) })
@@ -342,7 +339,7 @@ index e83ad69..9d359e3 100644
  }
  
  // cleanupRequests deletes requests older than the specified number of days.
-@@ -251,213 +234,182 @@ func (w *Worker) cleanupRequests(ctx context.Context, cleanupDays int, manual bo
+@@ -251,213 +234,182 @@ func (w *Worker) cleanupRequests(ctx con
  
  	cutoffTime := time.Now().AddDate(0, 0, -cleanupDays)
  
@@ -558,14 +555,14 @@ index e83ad69..9d359e3 100644
 -
 -	if ds == nil || ds.Primary {
 -		return
-+		return fmt.Errorf("load data storage %d: %w", storageID, err)
- 	}
+-	}
 -
 -	keys := []string{
 -		biz.GenerateExecutionRequestBodyKey(exec.ProjectID, exec.RequestID, exec.ID),
 -		biz.GenerateExecutionResponseBodyKey(exec.ProjectID, exec.RequestID, exec.ID),
 -		biz.GenerateExecutionResponseChunksKey(exec.ProjectID, exec.RequestID, exec.ID),
--	}
++		return fmt.Errorf("load data storage %d: %w", storageID, err)
+ 	}
 -
 -	// Directory-marker keys only exist as real directories on filesystem-like
 -	// backends. On object stores (S3/GCS) they were never created, so deleting
@@ -607,13 +604,13 @@ index e83ad69..9d359e3 100644
 -
 -		return
 +		return err
-+	}
+ 	}
 +	if ds.Primary || !hasRealDirectories(ds.Type) {
 +		return nil
 +	}
 +	if ds.Type == datastorage.TypeFs {
 +		return w.DataStorageService.DeleteDataDirectory(ctx, ds, key)
- 	}
++	}
 +	return w.DataStorageService.DeleteData(ctx, ds, key)
 +}
  
@@ -624,10 +621,10 @@ index e83ad69..9d359e3 100644
 +		biz.GenerateExecutionRequestBodyKey(exec.ProjectID, exec.RequestID, exec.ID),
 +		biz.GenerateExecutionResponseBodyKey(exec.ProjectID, exec.RequestID, exec.ID),
 +		biz.GenerateExecutionResponseChunksKey(exec.ProjectID, exec.RequestID, exec.ID),
-+	}
+ 	}
 +	if err := w.deleteExternalKeys(ctx, exec.DataStorageID, keys, cache); err != nil {
 +		return err
- 	}
++	}
 +	return w.cleanupExternalDirectory(ctx, exec.DataStorageID, biz.GenerateExecutionRequestDirKey(exec.ProjectID, exec.RequestID, exec.ID), cache)
 +}
  
@@ -671,7 +668,7 @@ index e83ad69..9d359e3 100644
  }
  
  // hasRealDirectories reports whether the storage backend materializes
-@@ -540,6 +492,7 @@ func (w *Worker) cleanupThreads(ctx context.Context, cleanupDays int, manual boo
+@@ -540,6 +492,7 @@ func (w *Worker) cleanupThreads(ctx cont
  			Where(
  				thread.CreatedAtLT(cutoffTime),
  				thread.StatusNEQ(thread.StatusRetained),
@@ -679,7 +676,7 @@ index e83ad69..9d359e3 100644
  			).
  			Order(ent.Asc(thread.FieldID)).
  			Limit(batchSize).
-@@ -579,6 +532,7 @@ func (w *Worker) cleanupTraces(ctx context.Context, cleanupDays int, manual bool
+@@ -579,6 +532,7 @@ func (w *Worker) cleanupTraces(ctx conte
  			Where(
  				trace.CreatedAtLT(cutoffTime),
  				trace.StatusNEQ(trace.StatusRetained),
@@ -687,7 +684,7 @@ index e83ad69..9d359e3 100644
  			).
  			Order(ent.Asc(trace.FieldID)).
  			Limit(batchSize).
-@@ -696,6 +650,10 @@ func (w *Worker) RunVacuumNow(ctx context.Context) error {
+@@ -696,6 +650,10 @@ func (w *Worker) RunVacuumNow(ctx contex
  
  // RunCleanupNow manually triggers the cleanup process with the specified days.
  func (w *Worker) RunCleanupNow(ctx context.Context, input TriggerGcCleanupInput) error {
@@ -698,7 +695,7 @@ index e83ad69..9d359e3 100644
  	manualDays := make(map[string]int)
  	if input.RequestsCleanupDays > 0 {
  		manualDays[biz.CleanupResourceRequests] = input.RequestsCleanupDays
-@@ -712,8 +670,7 @@ func (w *Worker) RunCleanupNow(ctx context.Context, input TriggerGcCleanupInput)
+@@ -712,8 +670,7 @@ func (w *Worker) RunCleanupNow(ctx conte
  	if input.ResponseChunksCleanupDays > 0 {
  		manualDays[biz.CleanupResourceResponseChunks] = input.ResponseChunksCleanupDays
  	}
@@ -708,11 +705,9 @@ index e83ad69..9d359e3 100644
  }
  
  // PreviewCleanup estimates how many records would be deleted without actually deleting them.
-diff --git a/internal/server/gc/gc_bodies.go b/internal/server/gc/gc_bodies.go
-index 7c47030..b0717cc 100644
 --- a/internal/server/gc/gc_bodies.go
 +++ b/internal/server/gc/gc_bodies.go
-@@ -112,10 +112,13 @@ func (w *Worker) stripRequestPayloads(ctx context.Context, kind bodyPayloadKind,
+@@ -112,10 +112,13 @@ func (w *Worker) stripRequestPayloads(ct
  	batchSize := w.getBatchSize()
  	total := 0
  	failed := 0
@@ -727,7 +722,7 @@ index 7c47030..b0717cc 100644
  		query := w.Ent.Request.Query().
  			Select(
  				request.FieldID,
-@@ -123,12 +126,11 @@ func (w *Worker) stripRequestPayloads(ctx context.Context, kind bodyPayloadKind,
+@@ -123,12 +126,11 @@ func (w *Worker) stripRequestPayloads(ct
  				request.FieldDataStorageID,
  			).
  			Where(
@@ -742,7 +737,7 @@ index 7c47030..b0717cc 100644
  
  		reqs, err := query.
  			Modify(func(s *sql.Selector) {
-@@ -151,6 +153,7 @@ func (w *Worker) stripRequestPayloads(ctx context.Context, kind bodyPayloadKind,
+@@ -151,6 +153,7 @@ func (w *Worker) stripRequestPayloads(ct
  
  		ids := make([]int, 0, len(reqs))
  		for _, req := range reqs {
@@ -750,7 +745,7 @@ index 7c47030..b0717cc 100644
  			if err := w.deleteRequestExternalPayload(ctx, req, kind, cache); err != nil {
  				// 外存还在时不能打 DB 已剥标记，否则 Load* 仍读对象且后续 GC 选不中。
  				log.Warn(ctx, "Skip stripping request payload; external delete failed",
-@@ -158,7 +161,6 @@ func (w *Worker) stripRequestPayloads(ctx context.Context, kind bodyPayloadKind,
+@@ -158,7 +161,6 @@ func (w *Worker) stripRequestPayloads(ct
  					log.Int("request_id", req.ID),
  					log.String("resource", string(kind)),
  				)
@@ -758,7 +753,7 @@ index 7c47030..b0717cc 100644
  				failed++
  
  				continue
-@@ -183,10 +185,13 @@ func (w *Worker) stripExecutionPayloads(ctx context.Context, kind bodyPayloadKin
+@@ -183,10 +185,13 @@ func (w *Worker) stripExecutionPayloads(
  	batchSize := w.getBatchSize()
  	total := 0
  	failed := 0
@@ -773,7 +768,7 @@ index 7c47030..b0717cc 100644
  		query := w.Ent.RequestExecution.Query().
  			Select(
  				requestexecution.FieldID,
-@@ -195,14 +200,13 @@ func (w *Worker) stripExecutionPayloads(ctx context.Context, kind bodyPayloadKin
+@@ -195,14 +200,13 @@ func (w *Worker) stripExecutionPayloads(
  				requestexecution.FieldDataStorageID,
  			).
  			Where(
@@ -790,7 +785,7 @@ index 7c47030..b0717cc 100644
  
  		execs, err := query.
  			Modify(func(s *sql.Selector) {
-@@ -225,13 +229,13 @@ func (w *Worker) stripExecutionPayloads(ctx context.Context, kind bodyPayloadKin
+@@ -225,13 +229,13 @@ func (w *Worker) stripExecutionPayloads(
  
  		ids := make([]int, 0, len(execs))
  		for _, exec := range execs {
@@ -805,8 +800,6 @@ index 7c47030..b0717cc 100644
  				failed++
  
  				continue
-diff --git a/internal/server/gc/gc_internal.go b/internal/server/gc/gc_internal.go
-index 4d445bf..69280b0 100644
 --- a/internal/server/gc/gc_internal.go
 +++ b/internal/server/gc/gc_internal.go
 @@ -2,11 +2,34 @@ package gc
@@ -846,11 +839,9 @@ index 4d445bf..69280b0 100644
 +	}()
 +	return nil
  }
-diff --git a/internal/server/gql/system.resolvers.go b/internal/server/gql/system.resolvers.go
-index f93320b..f7c5869 100644
 --- a/internal/server/gql/system.resolvers.go
 +++ b/internal/server/gql/system.resolvers.go
-@@ -268,20 +268,9 @@ func (r *mutationResolver) TriggerGcCleanup(ctx context.Context, input gc.Trigge
+@@ -303,20 +303,9 @@ func (r *mutationResolver) TriggerGcClea
  	if !scopes.UserHasScope(ctx, scopes.ScopeWriteSettings) {
  		return false, fmt.Errorf("permission denied: requires write:settings scope")
  	}
@@ -874,11 +865,9 @@ index f93320b..f7c5869 100644
  	return true, nil
  }
  
-diff --git a/internal/server/scheduler/scheduler.go b/internal/server/scheduler/scheduler.go
-index 6496a12..9de10b5 100644
 --- a/internal/server/scheduler/scheduler.go
 +++ b/internal/server/scheduler/scheduler.go
-@@ -27,6 +27,11 @@ func New(exec executors.ScheduledExecutor) *Scheduler {
+@@ -27,6 +27,11 @@ func New(exec executors.ScheduledExecuto
  // Register schedules a task and starts its cron. Returns an error if a task
  // with the same name already exists.
  func (s *Scheduler) Register(ctx context.Context, spec TaskSpec, fn func(ctx context.Context)) error {
@@ -890,7 +879,7 @@ index 6496a12..9de10b5 100644
  	s.mu.Lock()
  	defer s.mu.Unlock()
  
-@@ -163,7 +168,12 @@ func (s *Scheduler) schedule(ctx context.Context, t *task) error {
+@@ -163,7 +168,12 @@ func (s *Scheduler) schedule(ctx context
  				}
  			}()
  
@@ -904,8 +893,6 @@ index 6496a12..9de10b5 100644
  		}()
  	}
  
-diff --git a/internal/server/scheduler/task.go b/internal/server/scheduler/task.go
-index 5a705d2..af73565 100644
 --- a/internal/server/scheduler/task.go
 +++ b/internal/server/scheduler/task.go
 @@ -16,7 +16,7 @@ type task struct {

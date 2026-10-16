@@ -29,7 +29,7 @@ configure_log_cleanup() {
 	local cron_spec=''
 	local tmp changed=0
 
-	mkdir -p "$(dirname "$CRON_FILE")" /var/lock || return 1
+	mkdir -p "$(dirname "$CRON_FILE")" "$(dirname "$CRON_LOCK")" || return 1
 	lock "$CRON_LOCK" || return 1
 	tmp="$(mktemp "$(dirname "$CRON_FILE")/.gecoosac-cron.XXXXXX")" || {
 		lock -u "$CRON_LOCK"
@@ -58,6 +58,7 @@ configure_log_cleanup() {
 	if [ -n "$cron_spec" ]; then
 		printf '%s /usr/libexec/gecoosac-log-cleanup #gecoosac\n' "$cron_spec" >> "$tmp"
 	fi
+
 	chmod 600 "$tmp" || {
 		rm -f "$tmp"
 		lock -u "$CRON_LOCK"
@@ -78,7 +79,7 @@ configure_log_cleanup() {
 		}
 		changed=1
 	fi
-	lock -u "$CRON_LOCK"
+	lock -u "$CRON_LOCK" || return 1
 
 	[ "$changed" -eq 0 ] || reload_cron
 }

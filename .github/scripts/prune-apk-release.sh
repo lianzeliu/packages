@@ -17,20 +17,31 @@ REPO_ROOT="$CI_REPO_ROOT"
 RELEASE_TAG="$1"
 KEEP="${2:-1}"
 LATEST_ASSETS_FILE="${3:-}"
+APK_TOOL="${APK_TOOL:-apk}"
 
 [[ "$KEEP" =~ ^[1-9][0-9]*$ ]] || {
 	printf 'Invalid retention count: %s\n' "$KEEP" >&2
 	exit 1
 }
 
-release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
-assets_file="$(mktemp)"
-classified_file="$(mktemp)"
-trap 'rm -f "$assets_file" "$classified_file"' EXIT
+command -v "$APK_TOOL" >/dev/null || {
+	printf 'APK version tool not found: %s\n' "$APK_TOOL" >&2
+	exit 1
+}
 
-mapfile -t package_dirs < <(
-	ci_discover_packages
-)
+release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq '.id')"
+temp_dir="$(mktemp -d)"
+trap 'rm -rf -- "$temp_dir"' EXIT
+assets_file="$temp_dir/assets.tsv"
+classified_file="$temp_dir/classified.tsv"
+: > "$classified_file"
+: > "$temp_dir/removed.tsv"
+: > "$temp_dir/stale.tsv"
+: > "$temp_dir/labels.tsv"
+: > "$temp_dir/latest.tsv"
+
+ci_discover_packages > "$temp_dir/packages"
+mapfile -t package_dirs < "$temp_dir/packages"
 
 package_names=()
 for package_dir in "${package_dirs[@]}"; do
@@ -41,13 +52,12 @@ for package_dir in "${package_dirs[@]}"; do
 	fi
 done
 
-mapfile -t package_names < <(
-	printf '%s\n' "${package_names[@]}" |
-		awk 'NF { print length($0) "\t" $0 }' |
-		sort -t $'\t' -k1,1nr -k2,2 |
-		cut -f2- |
-		awk '!seen[$0]++'
-)
+printf '%s\n' "${package_names[@]}" |
+	awk 'NF { print length($0) "\t" $0 }' |
+	sort -t $'\t' -k1,1nr -k2,2 |
+	cut -f2- |
+	awk '!seen[$0]++' > "$temp_dir/package-names"
+mapfile -t package_names < "$temp_dir/package-names"
 
 declare -A current_package_names=()
 for name in "${package_names[@]}"; do
@@ -75,42 +85,67 @@ while IFS=$'\t' read -r asset_id asset_name asset_label created_at; do
 	fi
 
 	if [[ -z "$name" || -z "${current_package_names[$name]:-}" ]]; then
-		printf '删除已移除软件包的发布资产：%s\n' "$asset_name"
-		gh api --method DELETE \
-			"repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+		printf '%s\t%s\n' "$asset_id" "$asset_name" >> "$temp_dir/removed.tsv"
 		continue
 	fi
-	printf '%s\t%s\t%s\t%s\n' \
-		"$asset_id" "$asset_name" "$name" "$created_at" >> "$classified_file"
+	[[ "$asset_name" == "$name-"*.apk ]] || {
+		printf 'Release asset name does not match package: %s (%s)\n' "$asset_name" "$name" >&2
+		exit 1
+	}
+	version="${asset_name#"$name-"}"
+	version="${version%.apk}"
+	"$APK_TOOL" version --check "$version"
+	printf '%s\t%s\t%s\t%s\t%s\n' \
+		"$asset_id" "$asset_name" "$name" "$created_at" "$version" >> "$classified_file"
 
 	if [[ -n "$asset_label" ]]; then
-		printf 'Clearing legacy release asset label: %s\n' "$asset_name"
-		gh api --method PATCH \
-			"repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
-			-f name="$asset_name" -f label= >/dev/null
+		printf '%s\t%s\n' "$asset_id" "$asset_name" >> "$temp_dir/labels.tsv"
 	fi
 done < "$assets_file"
 
-mapfile -t packages < <(
-	awk -F '\t' '{ print $3 }' "$classified_file" | sort -u
-)
-
-[[ -z "$LATEST_ASSETS_FILE" ]] || : > "$LATEST_ASSETS_FILE"
+awk -F '\t' '{ print $3 }' "$classified_file" | sort -u > "$temp_dir/classified-packages"
+mapfile -t packages < "$temp_dir/classified-packages"
 
 for package in "${packages[@]}"; do
-	mapfile -t package_assets < <(
-		awk -F '\t' -v package="$package" '$3 == package { print }' "$classified_file" |
-			sort -t $'\t' -k4,4r
-	)
-	if [[ -n "$LATEST_ASSETS_FILE" ]]; then
-		printf '%s\n' "${package_assets[0]}" >> "$LATEST_ASSETS_FILE"
-	fi
-	stale_assets=("${package_assets[@]:KEEP}")
+	# Newer uploads win only when APK considers the versions equal.
+	awk -F '\t' -v package="$package" '$3 == package { print }' "$classified_file" |
+		sort -t $'\t' -k4,4r -k1,1nr > "$temp_dir/package-assets"
+	mapfile -t package_assets < "$temp_dir/package-assets"
+	ordered_assets=()
+	for asset in "${package_assets[@]}"; do
+		version="${asset##*$'\t'}"
+		index=0
+		while (( index < ${#ordered_assets[@]} )); do
+			other_version="${ordered_assets[$index]##*$'\t'}"
+			comparison="$("$APK_TOOL" version --test "$version" "$other_version")"
+			[[ "$comparison" != '>' ]] || break
+			index=$((index + 1))
+		done
+		ordered_assets=("${ordered_assets[@]:0:index}" "$asset" "${ordered_assets[@]:index}")
+	done
+	printf '%s\n' "${ordered_assets[0]%$'\t'*}" >> "$temp_dir/latest.tsv"
+	stale_assets=("${ordered_assets[@]:KEEP}")
 
 	for asset in "${stale_assets[@]}"; do
-		IFS=$'\t' read -r asset_id asset_name _ _ <<< "$asset"
-		printf 'Deleting stale release asset: %s\n' "$asset_name"
-		gh api --method DELETE \
-			"repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+		IFS=$'\t' read -r asset_id asset_name _ <<< "$asset"
+		printf '%s\t%s\n' "$asset_id" "$asset_name" >> "$temp_dir/stale.tsv"
 	done
 done
+
+while IFS=$'\t' read -r asset_id asset_name; do
+	printf 'Clearing legacy release asset label: %s\n' "$asset_name"
+	gh api --method PATCH \
+		"repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+		-f name="$asset_name" -f label= >/dev/null
+done < "$temp_dir/labels.tsv"
+
+cat "$temp_dir/removed.tsv" "$temp_dir/stale.tsv" > "$temp_dir/delete.tsv"
+while IFS=$'\t' read -r asset_id asset_name; do
+	printf 'Deleting obsolete release asset: %s\n' "$asset_name"
+	gh api --method DELETE \
+		"repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+done < "$temp_dir/delete.tsv"
+
+if [[ -n "$LATEST_ASSETS_FILE" ]]; then
+	cp "$temp_dir/latest.tsv" "$LATEST_ASSETS_FILE"
+fi

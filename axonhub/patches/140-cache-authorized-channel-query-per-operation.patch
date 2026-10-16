@@ -11,13 +11,10 @@ Serialize concurrent lookups to avoid duplicate reads. Mutations use
 direct authorized queries so credential or permission changes are read
 immediately, and no authorization result survives the operation.
 
-Base-Commit: 7a0cfbf42b00829dd8811cc87488f6194ed5ae02
+Base-Commit: a946fca495c52344ed073abb6c3562b9ff728b12
 
 ---
 
-diff --git a/internal/server/gql/channel_lookup.go b/internal/server/gql/channel_lookup.go
-new file mode 100644
-index 0000000..1c320e5
 --- /dev/null
 +++ b/internal/server/gql/channel_lookup.go
 @@ -0,0 +1,79 @@
@@ -100,11 +97,9 @@ index 0000000..1c320e5
 +	}
 +	return ch, err
 +}
-diff --git a/internal/server/gql/graphql.go b/internal/server/gql/graphql.go
-index 019b2c7..e30b21d 100644
 --- a/internal/server/gql/graphql.go
 +++ b/internal/server/gql/graphql.go
-@@ -138,6 +138,7 @@ func NewGraphqlHandlers(deps Dependencies) *GraphqlHandler {
+@@ -138,6 +138,7 @@ func NewGraphqlHandlers(deps Dependencie
  	})
  	gqlSrv.Use(&loggingTracer{})
  	gqlSrv.AroundOperations(apiKeyReadOnly)
@@ -112,7 +107,7 @@ index 019b2c7..e30b21d 100644
  	skipTestChannelTransaction := entgql.SkipOperations("TestChannel", "TestChannelAPIKeys")
  	skipBulkImportTransaction := entgql.SkipIfHasFields("bulkImportChannels")
  	gqlSrv.Use(entgql.Transactioner{
-@@ -225,7 +226,7 @@ var guidTypeToNodeType = map[string]string{
+@@ -225,7 +226,7 @@ var guidTypeToNodeType = map[string]stri
  	ent.TypePrompt:                  prompt.Table,
  }
  

@@ -1,29 +1,29 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=UTF-8"
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:251
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:249
 msgid "Advanced"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:132
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:133
 msgid "CPU %s"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:270
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:268
 msgid "Clear firmware directory"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:307
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:305
 msgid ""
 "Clear the dedicated Gecoos AC log at 03:00 on the selected calendar "
 "schedule. System log entries are never cleared."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:111
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:112
 msgid "Close"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:203
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:201
 msgid "Collecting data..."
 msgstr ""
 
@@ -31,74 +31,74 @@ msgstr ""
 msgid "Control"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:263
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:261
 msgid "Database directory"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:296
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:294
 msgid "Debug"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:257
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:255
 msgid "Directory used to store AP firmware uploaded for upgrades."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:308
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:306
 msgid "Disabled"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:302
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:300
 msgid ""
 "Disabled by default because Gecoos AC can produce a large volume of logs."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:253
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:251
 msgid "Enable"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:166
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:167
 msgid "Enable the service and save the configuration to start it."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:309
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:307
 msgid "Every day"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:311
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:309
 msgid "Every month"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:310
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:308
 msgid "Every week"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:288
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:291
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:286
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:289
 msgid "Failed to clear firmware directory: %s."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:325
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:323
 msgid "Failed to update the log cleanup schedule."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:256
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:254
 msgid "Firmware directory"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:284
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:282
 msgid "Firmware directory cleaned. Removed %d entries."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:240
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:238
 #: luci-app-gecoosac/root/usr/share/luci/menu.d/luci-app-gecoosac.json:14
 msgid "Gecoos AC"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:104
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:105
 msgid "Gecoos AC Log"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:250
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:248
 msgid "General"
 msgstr ""
 
@@ -106,109 +106,109 @@ msgstr ""
 msgid "Grant access to luci-app-gecoosac"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:297
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:295
 msgid "Info"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:306
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:304
 msgid "Log cleanup schedule"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:295
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:293
 msgid "Log level"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:93
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:94
 msgid "Log reader exited with code %s."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:134
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:135
 msgid "MEM %s"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:241
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:239
 msgid ""
 "Native Gecoos AC service and management interface. Default web password: "
 "admin. — AI Edition"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:95
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:96
 msgid "No Gecoos AC log entries were found."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:164
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:165
 msgid "Not running"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:143
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:144
 msgid "Open Gecoos AC"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:130
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:131
 msgid "PID %s"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:264
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:262
 msgid ""
 "Persistent directory used to store the controller configuration database."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:145
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:146
 msgid "Restart"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:164
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:165
 msgid "Running"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:164
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:165
 msgid "Running (unmanaged)"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:278
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:276
 msgid "Save and apply the firmware directory before clearing it."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:227
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:225
 msgid ""
 "Select a persistent writable database directory outside volatile or system "
 "paths."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:247
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:245
 msgid "Service Settings"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:72
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:73
 msgid "Service action failed: %s."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:148
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:149
 msgid "Start"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:215
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:213
 msgid ""
 "The directory must not be the root directory or contain parent-directory "
 "components."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:116
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:117
 msgid "Unable to read logs: %s."
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:287
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:285
 msgid "Unknown error"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:158
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:159
 msgid "View Log"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:301
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:299
 msgid "Write logs to system log"
 msgstr ""
 
-#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:64
+#: luci-app-gecoosac/htdocs/luci-static/resources/view/gecoosac.js:65
 msgid "exit code %s"
 msgstr ""

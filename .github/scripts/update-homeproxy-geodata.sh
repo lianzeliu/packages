@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -u
+set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${REPO_ROOT:-$(cd -- "$SCRIPT_DIR/../.." && pwd)}"
@@ -20,7 +20,8 @@ TMP_DIR="$(mktemp -d)" || {
 	exit 1
 }
 DASHBOARD_STAGE="${DASHBOARD_DIR}.new.$$"
-trap 'rm -rf -- "$TMP_DIR" "$DASHBOARD_STAGE" "$RESOURCES_DIR/.update.$$.tmp"' EXIT
+RESOURCE_RESTORE_FAILED=0
+trap 'rm -rf -- "$TMP_DIR" "$DASHBOARD_STAGE"; [ "$RESOURCE_RESTORE_FAILED" -ne 0 ] || rm -rf -- "$RESOURCES_DIR/.update.$$.tmp"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -28,14 +29,6 @@ warn() {
 	echo "WARNING: $*" >&2
 	if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
 		echo "::warning::$*"
-	fi
-}
-
-set_output() {
-	local name="$1"
-	local value="$2"
-	if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-		printf '%s=%s\n' "$name" "$value" >> "$GITHUB_OUTPUT"
 	fi
 }
 
@@ -91,14 +84,27 @@ versioned_url() {
 
 install_rule_set() {
 	local source_file="$1" version="$2" resource="$3"
-	local stage_dir="$RESOURCES_DIR/.update.$$.tmp"
+	local stage_dir="$RESOURCES_DIR/.update.$$.tmp/$resource"
 
 	mkdir -p "$stage_dir" &&
 		cp "$source_file" "$stage_dir/$resource.srs" &&
 		printf '%s\n' "$version" > "$stage_dir/$resource.ver" &&
-		chmod 0644 "$stage_dir/$resource.srs" "$stage_dir/$resource.ver" &&
-		mv -f "$stage_dir/$resource.srs" "$RESOURCES_DIR/$resource.srs" &&
-		mv -f "$stage_dir/$resource.ver" "$RESOURCES_DIR/$resource.ver"
+		chmod 0644 "$stage_dir/$resource.srs" "$stage_dir/$resource.ver" || return 1
+	if [ -e "$RESOURCES_DIR/$resource.srs" ]; then
+		cp -p "$RESOURCES_DIR/$resource.srs" "$stage_dir/$resource.srs.old" || return 1
+	fi
+	mv -f "$stage_dir/$resource.srs" "$RESOURCES_DIR/$resource.srs" || return 1
+	if ! mv -f "$stage_dir/$resource.ver" "$RESOURCES_DIR/$resource.ver"; then
+		if [ -f "$stage_dir/$resource.srs.old" ]; then
+			if ! mv -f "$stage_dir/$resource.srs.old" "$RESOURCES_DIR/$resource.srs"; then
+				RESOURCE_RESTORE_FAILED=1
+				printf 'Failed to restore %s; backup retained at %s.\n' "$resource" "$stage_dir" >&2
+			fi
+		else
+			rm -f "$RESOURCES_DIR/$resource.srs" || RESOURCE_RESTORE_FAILED=1
+		fi
+		return 1
+	fi
 }
 
 update_rule_set() {
@@ -106,7 +112,6 @@ update_rule_set() {
 	local version old_version
 
 	version="$(fetch_release_version "$version_url")" || return 1
-	resource_version="$version"
 	old_version="$(cat "$RESOURCES_DIR/$resource.ver" 2>/dev/null)"
 	if [ "$old_version" = "$version" ] && validate_rule_set "$RESOURCES_DIR/$resource.srs"; then
 		echo "HomeProxy resources: $resource $version (current)"
@@ -122,11 +127,13 @@ normalize_dashboard_javascript() {
 	local dashboard_root="$1"
 	local file
 
+	find "$dashboard_root" -type f -name '*.js' -print0 > "$TMP_DIR/dashboard-javascript" || return 1
 	while IFS= read -r -d '' file; do
-		# Preserve the JSON editor's two-space indent without trailing whitespace.
+		# CI-only whitespace normalization keeps the vendored tree diff-clean.
+		# The device updater intentionally preserves the original upstream files.
 		# shellcheck disable=SC2016
 		sed -i -E 's/^(`\+[^`]+\+`)  $/\1\\x20\\x20/' "$file" || return 1
-	done < <(find "$dashboard_root" -type f -name '*.js' -print0)
+	done < "$TMP_DIR/dashboard-javascript"
 }
 
 update_dashboard() {
@@ -165,7 +172,6 @@ update_dashboard() {
 
 mkdir -p "$RESOURCES_DIR" "$DASHBOARD_DIR" || exit 1
 update_failed=0
-resource_version=""
 if ! update_rule_set geoip_cn "$GEOIP_SOURCE" "$GEOIP_VERSION_URL"; then
 	warn "Failed to update HomeProxy geoip resource; continuing."
 	update_failed=1
@@ -183,4 +189,3 @@ if [[ "$update_failed" -ne 0 ]]; then
 	echo "HomeProxy resource update failed; refusing to commit partial data." >&2
 	exit 1
 fi
-set_output version "$resource_version"

@@ -64,7 +64,7 @@ jobs:
           makefile='sing-box/Makefile'
           upstream_tag="$(gh api 'repos/SagerNet/sing-box/releases?per_page=30' \
             --jq '[.[] | select(.draft == false)][0].tag_name')"
-          [[ "$upstream_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.]+)?$ ]]
+          [[ "$upstream_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]
 
           upstream_version="${upstream_tag#v}"
           current_version="$(sed -n 's/^PKG_UPSTREAM_VERSION:=//p' "$makefile")"
@@ -80,17 +80,27 @@ jobs:
             echo "version=$upstream_version"
           } >> "$GITHUB_OUTPUT"
 
-      - name: 下载并校验 Sing-Box 源码
+      - name: 下载并校验 Sing-Box 源码与补丁
         if: steps.upstream.outputs.changed == 'true'
         id: source
         env:
           UPSTREAM_TAG: ${{ steps.upstream.outputs.tag }}
         run: |
           archive="$RUNNER_TEMP/sing-box.tar.gz"
+          source_dir="$RUNNER_TEMP/sing-box-source"
           curl -fL --retry 3 \
             "https://codeload.github.com/SagerNet/sing-box/tar.gz/$UPSTREAM_TAG" \
             -o "$archive"
           tar -tzf "$archive" >/dev/null
+          mkdir -p "$source_dir"
+          tar -xzf "$archive" --strip-components=1 -C "$source_dir"
+          test -s "$source_dir/go.mod"
+
+          for patch_file in sing-box/patches/*.patch; do
+            [[ -f "$patch_file" ]] || continue
+            patch --batch --fuzz=0 -p1 -d "$source_dir" < "$patch_file"
+          done
+
           echo "hash=$(sha256sum "$archive" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: 更新 Sing-Box 软件包元数据
@@ -100,24 +110,13 @@ jobs:
           UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
         run: |
           makefile='sing-box/Makefile'
-          if [[ "$UPSTREAM_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-([A-Za-z]+)\.([0-9]+)$ ]]; then
-            package_version="${BASH_REMATCH[1]}_${BASH_REMATCH[2],,}${BASH_REMATCH[3]}"
-          elif [[ "$UPSTREAM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            package_version="$UPSTREAM_VERSION"
-          else
-            printf '无法转换 Sing-Box 版本号：%s\n' "$UPSTREAM_VERSION" >&2
-            exit 1
-          fi
-
           sed -i \
             -e "s/^PKG_UPSTREAM_VERSION:=.*/PKG_UPSTREAM_VERSION:=$UPSTREAM_VERSION/" \
-            -e "s/^PKG_VERSION:=.*/PKG_VERSION:=$package_version/" \
             -e 's/^PKG_RELEASE:=.*/PKG_RELEASE:=1/' \
             -e "s/^PKG_HASH:=.*/PKG_HASH:=$SOURCE_HASH/" \
             "$makefile"
 
           grep -Fx "PKG_UPSTREAM_VERSION:=$UPSTREAM_VERSION" "$makefile"
-          grep -Fx "PKG_VERSION:=$package_version" "$makefile"
           grep -Fx 'PKG_RELEASE:=1' "$makefile"
           grep -Fx "PKG_HASH:=$SOURCE_HASH" "$makefile"
           git diff --check

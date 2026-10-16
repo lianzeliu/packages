@@ -11,12 +11,10 @@ Use the core storage defaults directly rather than maintaining a second
 retention configuration. Filesystem failures roll back initialization;
 never downgrade a configured filesystem deployment to database payloads.
 
-Base-Commit: 7a0cfbf42b00829dd8811cc87488f6194ed5ae02
+Base-Commit: a946fca495c52344ed073abb6c3562b9ff728b12
 
 ---
 
-diff --git a/conf/conf.go b/conf/conf.go
-index 1dfec89..959c53f 100644
 --- a/conf/conf.go
 +++ b/conf/conf.go
 @@ -28,17 +28,18 @@ import (
@@ -49,7 +47,7 @@ index 1dfec89..959c53f 100644
  }
  
  type providerQuotaConfig struct {
-@@ -212,6 +213,9 @@ func customizedDecodeHook(srcType reflect.Type, dstType reflect.Type, data any)
+@@ -212,6 +213,9 @@ func customizedDecodeHook(srcType reflec
  
  // setDefaults sets default configuration values.
  func setDefaults(v *viper.Viper) {
@@ -59,8 +57,6 @@ index 1dfec89..959c53f 100644
  	// Server defaults
  	v.SetDefault("server.host", "0.0.0.0")
  	v.SetDefault("server.port", 8090)
-diff --git a/config.example.yml b/config.example.yml
-index 1521b67..fafd3c9 100644
 --- a/config.example.yml
 +++ b/config.example.yml
 @@ -2,6 +2,11 @@
@@ -75,11 +71,9 @@ index 1521b67..fafd3c9 100644
  # Server configuration
  server:
    host: "0.0.0.0"               # Server host (env: AXONHUB_SERVER_HOST)
-diff --git a/internal/server/biz/system.go b/internal/server/biz/system.go
-index c0d6486..b892de1 100644
 --- a/internal/server/biz/system.go
 +++ b/internal/server/biz/system.go
-@@ -669,8 +669,9 @@ func (p *ProbeFrequency) UnmarshalGQL(v any) error {
+@@ -669,8 +669,9 @@ func (p *ProbeFrequency) UnmarshalGQL(v
  type SystemServiceParams struct {
  	fx.In
  
@@ -91,7 +85,7 @@ index c0d6486..b892de1 100644
  }
  
  func NewSystemService(params SystemServiceParams) *SystemService {
-@@ -678,16 +679,18 @@ func NewSystemService(params SystemServiceParams) *SystemService {
+@@ -678,16 +679,18 @@ func NewSystemService(params SystemServi
  		AbstractService: &AbstractService{
  			db: params.Ent,
  		},
@@ -114,7 +108,7 @@ index c0d6486..b892de1 100644
  
  	mu           sync.RWMutex
  	timeLocation *time.Location
-@@ -818,8 +821,16 @@ func (s *SystemService) Initialize(ctx context.Context, params *InitializeSystem
+@@ -818,8 +821,16 @@ func (s *SystemService) Initialize(ctx c
  		return fmt.Errorf("failed to create primary data storage: %w", err)
  	}
  
@@ -132,9 +126,6 @@ index c0d6486..b892de1 100644
  	if err != nil {
  		return fmt.Errorf("failed to set default data storage ID: %w", err)
  	}
-diff --git a/internal/server/biz/system_initial_storage.go b/internal/server/biz/system_initial_storage.go
-new file mode 100644
-index 0000000..a6a6710
 --- /dev/null
 +++ b/internal/server/biz/system_initial_storage.go
 @@ -0,0 +1,43 @@

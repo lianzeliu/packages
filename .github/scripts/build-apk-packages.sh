@@ -22,7 +22,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=ci-common.sh
 source "$SCRIPT_DIR/ci-common.sh"
 REPO_ROOT="$CI_REPO_ROOT"
-mapfile -t DISCOVERED_PACKAGES < <(ci_discover_packages)
+temp_dir="$(mktemp -d)"
+trap 'rm -rf -- "$temp_dir"' EXIT
+ci_discover_packages > "$temp_dir/packages"
+mapfile -t DISCOVERED_PACKAGES < "$temp_dir/packages"
 
 declare -A DISCOVERED=()
 for package in "${DISCOVERED_PACKAGES[@]}"; do
@@ -47,14 +50,10 @@ if [[ ! -x "$SDK_ROOT/scripts/feeds" ]]; then
 	exit 1
 fi
 
-package_name() {
-	ci_package_name "$1"
-}
-
 for package in "${DISCOVERED_PACKAGES[@]}"; do
 	source_dir="$REPO_ROOT/$package"
 	target_dir="$SDK_ROOT/package/$package"
-	name="$(package_name "$package")"
+	name="$(ci_package_name "$package")"
 
 	[[ -f "$source_dir/Makefile" ]] || {
 		printf 'Package Makefile not found: %s\n' "$source_dir/Makefile" >&2
@@ -64,13 +63,12 @@ for package in "${DISCOVERED_PACKAGES[@]}"; do
 	rm -rf "$target_dir"
 	cp -a "$source_dir" "$target_dir"
 
+	find "$SDK_ROOT/package/feeds" -mindepth 2 -maxdepth 2 -type l \
+		\( -name "$package" -o -name "$name" \) -print0 > "$temp_dir/feed-links"
 	while IFS= read -r -d '' feed_link; do
 		printf 'Removing conflicting feed package: %s\n' "$feed_link"
 		unlink "$feed_link"
-	done < <(
-		find "$SDK_ROOT/package/feeds" -mindepth 2 -maxdepth 2 -type l \
-			\( -name "$package" -o -name "$name" \) -print0 2>/dev/null
-	)
+	done < "$temp_dir/feed-links"
 done
 
 {
@@ -85,7 +83,7 @@ done
 	fi
 
 	for package in "${SELECTED_PACKAGES[@]}"; do
-		name="$(package_name "$package")"
+		name="$(ci_package_name "$package")"
 		printf 'CONFIG_PACKAGE_%s=m\n' "$name"
 	done
 } > "$SDK_ROOT/.config"
@@ -100,7 +98,7 @@ config_package_enabled() {
 }
 
 for package in "${SELECTED_PACKAGES[@]}"; do
-	name="$(package_name "$package")"
+	name="$(ci_package_name "$package")"
 	config_package_enabled "$name" || {
 		printf 'Selected package is not enabled in SDK config: %s\n' "$name" >&2
 		exit 1
@@ -116,14 +114,13 @@ for package in "${SELECTED_PACKAGES[@]}"; do
 done
 
 for package in "${SELECTED_PACKAGES[@]}"; do
-	name="$(package_name "$package")"
+	name="$(ci_package_name "$package")"
+	find "$SDK_ROOT/dl" -maxdepth 1 -type f \
+		\( -name "$name-*" -o -name "$name.*" \) -print0 > "$temp_dir/cached-sources"
 	while IFS= read -r -d '' cached_source; do
 		printf '删除待更新软件包的旧源码缓存：%s\n' "${cached_source##*/}"
 		unlink "$cached_source"
-	done < <(
-		find "$SDK_ROOT/dl" -maxdepth 1 -type f \
-			\( -name "$name-*" -o -name "$name.*" \) -print0
-	)
+	done < "$temp_dir/cached-sources"
 
 	make -C "$SDK_ROOT" "package/$package/clean"
 	make -C "$SDK_ROOT" -j"$(nproc)" "package/$package/compile" ||
@@ -144,13 +141,14 @@ copy_apk() {
 	local found=0
 	local source_file target_file metadata actual_name selected_file=''
 
+	find "$SDK_ROOT/bin" -type f -name "${package_name}-*.apk" -print0 > "$temp_dir/package-apks" || return 1
 	while IFS= read -r -d '' source_file; do
 		metadata="$("$APK_TOOL" adbdump "$source_file")"
 		actual_name="$(awk '/^  name: / { sub(/^  name: /, ""); print; exit }' <<< "$metadata")"
 		[[ "$actual_name" == "$package_name" ]] || continue
 		found=$((found + 1))
 		selected_file="$source_file"
-	done < <(find "$SDK_ROOT/bin" -type f -name "${package_name}-*.apk" -print0)
+	done < "$temp_dir/package-apks"
 
 	if (( found != 1 )); then
 		printf 'Expected exactly one APK output for package %s, found %s\n' \
@@ -167,14 +165,15 @@ copy_apk() {
 }
 
 for package in "${SELECTED_PACKAGES[@]}"; do
-	name="$(package_name "$package")"
+	name="$(ci_package_name "$package")"
 	copy_apk "$name"
 	if [[ "$name" == luci-app-* ]] && [[ -d "$REPO_ROOT/$package/po/zh_Hans" ]]; then
 		copy_apk "luci-i18n-${name#luci-app-}-zh-cn"
 	fi
 done
 
-mapfile -d '' -t APK_FILES < <(find "$OUTPUT_DIR" -maxdepth 1 -type f -name '*.apk' -print0 | sort -z)
+find "$OUTPUT_DIR" -maxdepth 1 -type f -name '*.apk' -print0 | sort -z > "$temp_dir/all-apks"
+mapfile -d '' -t APK_FILES < "$temp_dir/all-apks"
 (( ${#APK_FILES[@]} > 0 )) || {
 	printf 'No APK files were collected.\n' >&2
 	exit 1

@@ -2,7 +2,7 @@
 
 'use strict';
 
-import { access, glob, lsdir, readlink, realpath, rmdir, stat, unlink } from 'fs';
+import { access, glob, lsdir, readfile, readlink, realpath, rmdir, stat, unlink } from 'fs';
 import { process_list } from 'luci.sys';
 import { cursor } from 'uci';
 
@@ -26,22 +26,39 @@ const protectedDirs = {
 	'/var': true
 };
 
-function process_status() {
+function process_status(managed_pid) {
 	let result = {
 		exists: !!access(binpath, 'x'),
 		running: false
 	};
-	let pid = 0;
+	let pid = int(managed_pid) || 0;
+	const target = pid > 0 ? readlink(`/proc/${pid}/exe`) : null;
+	if (target !== binpath && target !== binpath + ' (deleted)') {
+		// procd manages the log runner; find its native Gecoos AC child.
+		const children = pid > 0 ? trim(readfile(`/proc/${pid}/task/${pid}/children`) || '') : '';
+		pid = 0;
+		for (let child in split(children, /\s+/)) {
+			if (!match(child, /^[0-9]+$/))
+				continue;
+			const child_target = readlink(`/proc/${child}/exe`);
+			if (child_target === binpath || child_target === binpath + ' (deleted)') {
+				pid = +child;
+				break;
+			}
+		}
+	}
 
-	for (let path in glob('/proc/[0-9]*/exe')) {
-		let target = readlink(path);
-		if (target != binpath && target != binpath + ' (deleted)')
-			continue;
+	if (!pid) {
+		for (let path in glob('/proc/[0-9]*/exe')) {
+			let target = readlink(path);
+			if (target != binpath && target != binpath + ' (deleted)')
+				continue;
 
-		let fields = match(path, /^\/proc\/([0-9]+)\/exe$/);
-		if (fields) {
-			pid = +fields[1];
-			break;
+			let fields = match(path, /^\/proc\/([0-9]+)\/exe$/);
+			if (fields) {
+				pid = +fields[1];
+				break;
+			}
 		}
 	}
 
@@ -135,8 +152,9 @@ function remove_contents(path) {
 
 const methods = {
 	status: {
-		call: function() {
-			return process_status();
+		args: { pid: 0 },
+		call: function(request) {
+			return process_status(request.args.pid);
 		}
 	},
 
