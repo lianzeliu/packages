@@ -1,0 +1,17 @@
+{
+	"luci-app-wolplus": {
+		"description": "Grant access to luci-app-wolplus",
+		"read": {
+			"ubus": {
+				"luci-rpc": [ "getHostHints", "getNetworkDevices" ]
+			},
+			"uci": [ "wolplus" ]
+		},
+		"write": {
+			"ubus": {
+				"luci.wolplus": [ "sync", "wake" ]
+			},
+			"uci": [ "wolplus" ]
+		}
+	}
+}

@@ -1,0 +1,149 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:170
+msgid "Client Settings"
+msgstr ""
+
+#: luci-app-wolplus/root/usr/share/luci/menu.d/luci-app-wolplus.json:3
+msgid "Control"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:234
+msgid "Copy Link"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:200
+msgid "Cron expression"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:98
+msgid "Cron expression online generator"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:125
+msgid ""
+"Direct wake links let you wake a device with a single URL, without logging "
+"in to LuCI. Keep the token secret: anyone holding the link can wake "
+"devices."
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:103
+msgid "Disabled"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:91
+msgid "Expecting: %s"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:299
+msgid "Failed to copy the wake link."
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:339
+msgid "Failed to update scheduled wake tasks."
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:174
+msgid "General Settings"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:167
+msgid "Generate"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:138
+msgid "Generate Token"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:124
+msgid "Global Settings"
+msgstr ""
+
+#: luci-app-wolplus/root/usr/share/rpcd/acl.d/luci-app-wolplus.json:3
+msgid "Grant access to luci-app-wolplus"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:130
+msgid "Leave empty to disable direct wake links"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:180
+msgid "MAC Address"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:95
+msgid ""
+"Minutes (0-59), hours (0-23), days (1-31), months (1-12), weekdays (0-6)."
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:177
+msgid "Name"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:185
+msgid "Network Interface"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:280
+msgid "Please save the client before copying its wake link."
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:254
+msgid "Please save the client before waking it up."
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:285
+msgid "Please set a wake token in Global Settings first."
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:175
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:191
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:196
+msgid "Scheduled Wake"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:131
+msgid ""
+"Used as the <code>?token=</code> suffix in direct wake links, e.g. "
+"<code>/cgi-bin/wolplus-wake?mac=AA:BB:CC:DD:EE:FF&token=…</code>"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:121
+#: luci-app-wolplus/root/usr/share/luci/menu.d/luci-app-wolplus.json:14
+msgid "WOL Plus"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:226
+msgid "Wake"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:267
+msgid "Wake Host"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:127
+msgid "Wake Token"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:263
+msgid "Wake command completed with code %d."
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:271
+msgid "Wake command failed: %s."
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:294
+msgid "Wake link copied: "
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:122
+msgid ""
+"Wake local network devices immediately or on an individual schedule. — AI "
+"Edition"
+msgstr ""
+
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:91
+msgid "valid cron expression"
+msgstr ""

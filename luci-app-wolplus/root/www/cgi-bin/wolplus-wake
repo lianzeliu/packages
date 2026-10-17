@@ -1,0 +1,210 @@
+#!/bin/sh
+# wolplus-wake: token-authenticated direct Wake-on-LAN endpoint (no LuCI login).
+#
+#   http://<router>/cgi-bin/wolplus-wake?mac=AA:BB:CC:DD:EE:FF&token=<token>
+#   http://<router>/cgi-bin/wolplus-wake?host=<name>&token=<token>
+#
+# The token is stored in /etc/config/wolplus (section "global", option
+# "token") and is managed from the LuCI "WOL Plus" page. Anyone holding a
+# link can wake devices, so keep the token secret like a password.
+#
+# Response is a Chinese HTML page by default; add &format=json for JSON.
+
+CONFIG=wolplus
+ETHERWAKE=/usr/bin/etherwake
+
+[ -f /lib/functions.sh ] && . /lib/functions.sh
+
+# URL-decode the sequences that can legitimately appear in our parameters
+# (MAC from encodeURIComponent, host names, token). Selective on purpose:
+# printf '%b' with \xHH behaves differently across dash / busybox ash, so
+# this uses plain sed replacements only, verified on both. Anything else
+# stays encoded and fails validation downstream (fail-closed).
+# NOTE: %25 -> % must stay last, and %2B -> + must come after '+ ' -> ' '.
+urldecode() {
+	printf '%s' "$1" | sed \
+		-e 's/+/ /g' \
+		-e 's/%20/ /g' \
+		-e 's/%3[Aa]/:/g' \
+		-e 's/%2[Ff]/\//g' \
+		-e 's/%3[Ff]/?/g' \
+		-e 's/%26/\&/g' \
+		-e 's/%3[Dd]/=/g' \
+		-e 's/%2[Bb]/+/g' \
+		-e 's/%25/%/g'
+}
+
+html_escape() {
+	printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' | tr -d '\n\r'
+}
+
+json_escape() {
+	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr -d '\n\r\t'
+}
+
+respond() {
+	local status="$1" success="$2" message="$3" mac="$4" iface="$5"
+	local title heading cls
+
+	if [ "$format" = "json" ]; then
+		printf 'Status: %s\r\n' "$status"
+		printf 'Content-Type: application/json\r\n'
+		printf 'Cache-Control: no-store\r\n'
+		printf '\r\n'
+		printf '{"success":%s,"error":"%s","mac":"%s","iface":"%s"}' \
+			"$success" "$(json_escape "$message")" "$(json_escape "$mac")" "$(json_escape "$iface")"
+		exit 0
+	fi
+
+	if [ "$success" = "true" ]; then
+		title="唤醒成功"
+		heading="✅ 唤醒包已发送"
+		cls="ok"
+	else
+		title="唤醒失败"
+		heading="❌ 唤醒失败"
+		cls="err"
+	fi
+
+	printf 'Status: %s\r\n' "$status"
+	printf 'Content-Type: text/html; charset=utf-8\r\n'
+	printf 'Cache-Control: no-store\r\n'
+	printf '\r\n'
+	cat <<EOF
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$title</title>
+<style>body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-width:480px;margin:40px auto;padding:0 16px;color:#222}h1{font-size:22px}.ok{color:#0a7d2c}.err{color:#c00}.box{border:1px solid #ddd;border-radius:8px;padding:16px;background:#fafafa;line-height:1.8}code{background:#eee;padding:2px 6px;border-radius:4px}.note{color:#666;font-size:14px}</style>
+</head>
+<body>
+<h1 class="$cls">$heading</h1>
+<div class="box">
+EOF
+	if [ "$success" = "true" ]; then
+		cat <<EOF
+设备 MAC：<code>$(html_escape "$mac")</code><br>
+发出接口：<code>$(html_escape "$iface")</code>
+</div>
+<p class="note">魔术包已通过路由器发出，设备应在几秒内开机。若未开机，请检查设备的 BIOS 网络唤醒、网卡“魔术包唤醒”设置，并确认 Windows 已关闭“快速启动”。</p>
+EOF
+	else
+		cat <<EOF
+原因：$(html_escape "$message")
+</div>
+EOF
+	fi
+	cat <<EOF
+</body>
+</html>
+EOF
+	exit 0
+}
+
+valid_mac() {
+	printf '%s\n' "$1" | grep -Eq '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+}
+
+valid_iface() {
+	case "$1" in
+		''|*[!A-Za-z0-9_.:-]*) return 1 ;;
+		*) return 0 ;;
+	esac
+}
+
+valid_token() {
+	case "$1" in
+		''|*[!A-Za-z0-9_-]*) return 1 ;;
+		*) return 0 ;;
+	esac
+}
+
+# --- request ---------------------------------------------------------------
+
+if [ "$REQUEST_METHOD" != "GET" ]; then
+	respond "405 Method Not Allowed" false "只支持 GET 请求" "" ""
+fi
+
+# Parse QUERY_STRING into mac / host / token / iface / format
+mac="" host="" token="" iface="" format=""
+old_ifs="$IFS"
+IFS='&'
+set -f
+# shellcheck disable=SC2086
+set -- $QUERY_STRING
+set +f
+IFS="$old_ifs"
+
+for pair in "$@"; do
+	key="${pair%%=*}"
+	val="${pair#*=}"
+	[ "$key" = "$pair" ] && val=""
+	val="$(urldecode "$val")"
+	case "$key" in
+		mac) mac="$val" ;;
+		host) host="$val" ;;
+		token) token="$val" ;;
+		iface) iface="$val" ;;
+		format) format="$val" ;;
+	esac
+done
+
+# --- token check -----------------------------------------------------------
+
+configured="$(uci get "$CONFIG.global.token" 2>/dev/null)"
+
+if [ -z "$configured" ]; then
+	respond "403 Forbidden" false "未配置唤醒 Token，请先在 LuCI 全局设置中设置" "" ""
+fi
+
+if ! valid_token "$token" || [ "$token" != "$configured" ]; then
+	respond "403 Forbidden" false "Token 无效" "" ""
+fi
+
+# --- resolve target --------------------------------------------------------
+
+if [ -n "$host" ]; then
+	# Look up the macclient section by name
+	found_mac=""; found_iface=""
+	lookup_host() {
+		local section="$1"
+		local name macaddr maceth
+		config_get name "$section" name ""
+		if [ "$name" = "$host" ]; then
+			config_get macaddr "$section" macaddr ""
+			config_get maceth "$section" maceth "br-lan"
+			found_mac="$macaddr"
+			found_iface="$maceth"
+		fi
+	}
+	config_load "$CONFIG"
+	config_foreach lookup_host macclient
+	if [ -z "$found_mac" ]; then
+		respond "404 Not Found" false "找不到该设备" "" ""
+	fi
+	mac="$found_mac"
+	[ -z "$iface" ] && iface="$found_iface"
+fi
+
+[ -z "$iface" ] && iface="br-lan"
+
+if ! valid_mac "$mac"; then
+	respond "400 Bad Request" false "MAC 地址格式无效" "" ""
+fi
+
+if ! valid_iface "$iface"; then
+	respond "400 Bad Request" false "接口名称无效" "" ""
+fi
+
+# --- wake ------------------------------------------------------------------
+
+output="$("$ETHERWAKE" -b -D -i "$iface" "$mac" 2>&1)"
+rc=$?
+
+if [ "$rc" -ne 0 ]; then
+	respond "500 Internal Server Error" false "发送唤醒包失败：$output" "$mac" "$iface"
+fi
+
+respond "200 OK" true "" "$mac" "$iface"
