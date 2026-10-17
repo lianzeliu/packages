@@ -90,6 +90,11 @@ respond() {
 <div class="box">
 EOF
 	if [ "$success" = "true" ]; then
+		if [ -n "$devname" ]; then
+			cat <<EOF
+设备：<code>$(html_escape "$devname")</code><br>
+EOF
+		fi
 		cat <<EOF
 设备 MAC：<code>$(html_escape "$mac")</code><br>
 发出接口：<code>$(html_escape "$iface")</code>
@@ -129,30 +134,70 @@ confirm_page() {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>确认唤醒</title>
-<style>body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-width:480px;margin:40px auto;padding:0 16px;color:#222}h1{font-size:22px}.box{border:1px solid #ddd;border-radius:8px;padding:16px;background:#fafafa;line-height:1.8}code{background:#eee;padding:2px 6px;border-radius:4px}.note{color:#666;font-size:14px}.wake-btn{display:block;width:100%;margin-top:20px;padding:14px 0;font-size:18px;font-weight:bold;color:#fff;background:#0a7d2c;border:none;border-radius:8px;cursor:pointer}.wake-btn:active{background:#086623}</style>
+<style>body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-width:480px;margin:40px auto;padding:0 16px;color:#222}h1{font-size:22px}.ok{color:#0a7d2c}.err{color:#c00}.box{border:1px solid #ddd;border-radius:8px;padding:16px;background:#fafafa;line-height:1.8}code{background:#eee;padding:2px 6px;border-radius:4px}.note{color:#666;font-size:14px}.wake-btn{display:block;width:100%;margin-top:20px;padding:14px 0;font-size:18px;font-weight:bold;color:#fff;background:#0a7d2c;border:none;border-radius:8px;cursor:pointer}.wake-btn:active{background:#086623}.wake-btn:disabled{background:#999;cursor:not-allowed}#result{margin-top:16px;font-size:17px;font-weight:bold;min-height:24px}</style>
 </head>
 <body>
 <h1>确认唤醒</h1>
 <div class="box">
 EOF
-	if [ -n "$host" ]; then
+	if [ -n "$devname" ]; then
 		cat <<EOF
-设备：<code>$(html_escape "$host")</code><br>
+设备：<code>$(html_escape "$devname")</code><br>
 EOF
 	fi
 	cat <<EOF
 设备 MAC：<code>$(html_escape "$mac")</code><br>
 发出接口：<code>$(html_escape "$iface")</code>
 </div>
-<form method="post" action="$(html_escape "$action")">
+<form id="wakeForm" method="post" action="$(html_escape "$action")">
 <input type="hidden" name="mac" value="$(html_escape "$mac")">
 <input type="hidden" name="host" value="$(html_escape "$host")">
 <input type="hidden" name="token" value="$(html_escape "$token")">
 <input type="hidden" name="iface" value="$(html_escape "$iface")">
 <input type="hidden" name="format" value="$(html_escape "$format")">
-<button type="submit" class="wake-btn">唤醒</button>
+<button id="wakeBtn" type="submit" class="wake-btn">唤醒</button>
 </form>
+<div id="result"></div>
 <p class="note">点击“唤醒”后将发送魔术包，设备应在几秒内开机。</p>
+<script>
+(function () {
+	var form = document.getElementById('wakeForm');
+	var btn = document.getElementById('wakeBtn');
+	var result = document.getElementById('result');
+	if (!form || !btn || !result || !window.fetch) return;
+	form.addEventListener('submit', function (ev) {
+		ev.preventDefault();
+		btn.disabled = true;
+		btn.textContent = '正在发送…';
+		result.textContent = '';
+		result.className = '';
+		var data = new FormData(form);
+		data.set('format', 'json');
+		fetch(form.action, {
+			method: 'POST',
+			body: new URLSearchParams(data),
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			credentials: 'same-origin'
+		}).then(function (resp) {
+			return resp.json();
+		}).then(function (j) {
+			if (j && j.success) {
+				result.className = 'ok';
+				result.textContent = '✅ 唤醒包已发送';
+			} else {
+				result.className = 'err';
+				result.textContent = '❌ 唤醒失败' + (j && j.error ? '：' + j.error : '');
+			}
+		}).catch(function () {
+			result.className = 'err';
+			result.textContent = '❌ 请求失败，请检查网络后重试';
+		}).finally(function () {
+			btn.disabled = false;
+			btn.textContent = '唤醒';
+		});
+	});
+})();
+</script>
 </body>
 </html>
 EOF
@@ -263,6 +308,23 @@ fi
 
 if ! valid_iface "$iface"; then
 	respond "400 Bad Request" false "接口名称无效" "" ""
+fi
+
+# Device name for display: host= already gives it; for mac= links,
+# reverse-lookup the name by MAC so the confirm page shows it too.
+devname="$host"
+if [ -z "$devname" ]; then
+	lookup_mac() {
+		local section="$1"
+		local name macaddr
+		config_get name "$section" name ""
+		config_get macaddr "$section" macaddr ""
+		if [ -n "$name" ] && [ "$macaddr" = "$mac" ]; then
+			devname="$name"
+		fi
+	}
+	config_load "$CONFIG"
+	config_foreach lookup_mac macclient
 fi
 
 # GET (HTML) shows the confirmation page with a Wake button; the actual
