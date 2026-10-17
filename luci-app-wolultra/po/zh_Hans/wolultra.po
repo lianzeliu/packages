@@ -75,7 +75,7 @@ msgstr "定时唤醒"
 #: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:121
 #: luci-app-wolultra/root/usr/share/luci/menu.d/luci-app-wolultra.json:14
 msgid "WOL Ultra"
-msgstr "超级网络唤醒"
+msgstr "网络唤醒"
 
 #: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:180
 msgid "Wake"
@@ -95,9 +95,8 @@ msgstr "唤醒命令执行失败：%s。"
 
 #: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:122
 msgid ""
-"Wake local network devices immediately or on an individual schedule. — AI "
-"Edition"
-msgstr "立即唤醒局域网设备，或为每台设备设置独立的定时唤醒任务。—— AI Edition"
+"Wake local network devices immediately or on an individual schedule. "
+msgstr "立即唤醒局域网设备，或为每台设备设置独立的定时唤醒任务。"
 
 #: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:91
 msgid "valid cron expression"
