@@ -131,8 +131,10 @@ return view.extend({
 		o.description = _('Used as the <code>?token=</code> suffix in direct wake links, e.g. <code>/cgi-bin/wolultra-wake?mac=AA:BB:CC:DD:EE:FF&token=…</code>');
 
 		/* DummyValue + direct DOM handler: form.Button's onclick dispatch and
-		   getWidget() lookup proved unreliable (silent no-op), so the button
-		   finds the token input by its cbid instead of via the form API. */
+		   getWidget() lookup proved unreliable (silent no-op), and the
+		   cbid lookup also missed, so find the token input without
+		   depending on its id/name scheme: it is the only password
+		   field on this page. */
 		o = s.option(form.DummyValue, '_generate_token', _('Generate Token'));
 		o.renderWidget = function(section_id, option_index, cfgvalue) {
 			return E('button', {
@@ -140,7 +142,9 @@ return view.extend({
 				'class': 'btn cbi-button cbi-button-action',
 				'click': function(ev) {
 					ev.preventDefault();
-					var input = document.getElementById('cbid.wolultra.global.token');
+					var input = document.querySelector('input[type="password"]');
+					if (!input)
+						input = document.getElementById('cbid.wolultra.global.token');
 					if (!input) {
 						var inputs = document.querySelectorAll('input[name$=".token"]');
 						for (var i = 0; i < inputs.length; i++) {
@@ -291,13 +295,38 @@ return view.extend({
 			]), 'info');
 		};
 
+		var failed = function() {
+			ui.addNotification(null, E('p', _('Failed to copy the wake link.')), 'error');
+		};
+
+		/* navigator.clipboard needs a secure context (HTTPS/localhost);
+		   plain-HTTP LAN LuCI has none, so fall back to execCommand
+		   which works everywhere. Copy directly, no prompt dialog. */
+		var copyLegacy = function() {
+			var ta = document.createElement('textarea');
+			ta.value = url;
+			ta.style.position = 'fixed';
+			ta.style.opacity = '0';
+			document.body.appendChild(ta);
+			ta.select();
+			var ok = false;
+			try {
+				ok = document.execCommand('copy');
+			} catch (e) {
+				ok = false;
+			}
+			document.body.removeChild(ta);
+			if (ok)
+				done();
+			else
+				failed();
+		};
+
 		if (navigator.clipboard && navigator.clipboard.writeText) {
-			return navigator.clipboard.writeText(url).then(done).catch(function() {
-				window.prompt(_('Copy the wake link:'), url);
-			});
+			return navigator.clipboard.writeText(url).then(done).catch(copyLegacy);
 		}
 
-		window.prompt(_('Copy the wake link:'), url);
+		copyLegacy();
 		return Promise.resolve();
 	},
 

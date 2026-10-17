@@ -1,7 +1,7 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=UTF-8"
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:151
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:170
 msgid "Client Settings"
 msgstr ""
 
@@ -9,16 +9,11 @@ msgstr ""
 msgid "Control"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:215
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:234
 msgid "Copy Link"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:281
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:285
-msgid "Copy the wake link:"
-msgstr ""
-
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:181
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:200
 msgid "Cron expression"
 msgstr ""
 
@@ -41,19 +36,23 @@ msgstr ""
 msgid "Expecting: %s"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:295
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:299
+msgid "Failed to copy the wake link."
+msgstr ""
+
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:339
 msgid "Failed to update scheduled wake tasks."
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:155
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:174
 msgid "General Settings"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:134
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:167
 msgid "Generate"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:133
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:138
 msgid "Generate Token"
 msgstr ""
 
@@ -69,7 +68,7 @@ msgstr ""
 msgid "Leave empty to disable direct wake links"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:161
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:180
 msgid "MAC Address"
 msgstr ""
 
@@ -78,29 +77,29 @@ msgid ""
 "Minutes (0-59), hours (0-23), days (1-31), months (1-12), weekdays (0-6)."
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:158
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:177
 msgid "Name"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:166
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:185
 msgid "Network Interface"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:261
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:280
 msgid "Please save the client before copying its wake link."
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:235
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:254
 msgid "Please save the client before waking it up."
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:266
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:285
 msgid "Please set a wake token in Global Settings first."
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:156
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:172
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:177
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:175
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:191
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:196
 msgid "Scheduled Wake"
 msgstr ""
 
@@ -115,11 +114,11 @@ msgstr ""
 msgid "WOL Ultra"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:207
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:226
 msgid "Wake"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:248
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:267
 msgid "Wake Host"
 msgstr ""
 
@@ -127,15 +126,15 @@ msgstr ""
 msgid "Wake Token"
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:244
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:263
 msgid "Wake command completed with code %d."
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:252
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:271
 msgid "Wake command failed: %s."
 msgstr ""
 
-#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:275
+#: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:294
 msgid "Wake link copied: "
 msgstr ""
 
