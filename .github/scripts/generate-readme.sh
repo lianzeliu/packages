@@ -115,9 +115,6 @@ plugin_description() {
 		luci-app-gecoosac)
 			printf 'gecoosac 核心的 LuCI 管理界面与 OpenWrt 集成。\n'
 			;;
-		luci-app-homeproxy)
-			printf 'sing-box 核心的 LuCI 管理界面与 OpenWrt 集成。\n'
-			;;
 		luci-app-wolplus)
 			printf 'wol 功能的 LuCI 管理界面与 OpenWrt 集成。\n'
 			;;
