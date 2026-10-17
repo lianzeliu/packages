@@ -47,10 +47,11 @@ respond() {
 	local title heading cls
 
 	if [ "$format" = "json" ]; then
-		printf 'Status: %s\r\n' "$status"
-		printf 'Content-Type: application/json\r\n'
-		printf 'Cache-Control: no-store\r\n'
-		printf '\r\n'
+		printf 'Status: %s\n' "$status"
+		printf 'Content-Type: application/json\n'
+		printf 'Content-Disposition: inline\n'
+		printf 'Cache-Control: no-store\n'
+		printf '\n'
 		printf '{"success":%s,"error":"%s","mac":"%s","iface":"%s"}' \
 			"$success" "$(json_escape "$message")" "$(json_escape "$mac")" "$(json_escape "$iface")"
 		exit 0
@@ -66,10 +67,11 @@ respond() {
 		cls="err"
 	fi
 
-	printf 'Status: %s\r\n' "$status"
-	printf 'Content-Type: text/html; charset=utf-8\r\n'
-	printf 'Cache-Control: no-store\r\n'
-	printf '\r\n'
+	printf 'Status: %s\n' "$status"
+	printf 'Content-Type: text/html; charset=utf-8\n'
+	printf 'Content-Disposition: inline\n'
+	printf 'Cache-Control: no-store\n'
+	printf '\n'
 	cat <<EOF
 <!DOCTYPE html>
 <html lang="zh-CN">
