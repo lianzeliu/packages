@@ -125,46 +125,31 @@ return view.extend({
 			_('Direct wake links let you wake a device with a single URL, without logging in to LuCI. Keep the token secret: anyone holding the link can wake devices.'));
 
 		o = s.option(form.Value, 'token', _('Wake Token'));
-		o.password = true;
 		o.rmempty = true;
 		o.placeholder = _('Leave empty to disable direct wake links');
 		o.description = _('Used as the <code>?token=</code> suffix in direct wake links, e.g. <code>/cgi-bin/wolultra-wake?mac=AA:BB:CC:DD:EE:FF&token=…</code>');
 
-		/* DummyValue + direct DOM handler: form.Button's onclick dispatch and
-		   getWidget() lookup proved unreliable (silent no-op), and the
-		   cbid lookup also missed, so find the token input without
-		   depending on its id/name scheme: it is the only password
-		   field on this page. */
-		o = s.option(form.DummyValue, '_generate_token', _('Generate Token'));
-		o.renderWidget = function(section_id, option_index, cfgvalue) {
-			return E('button', {
-				'type': 'button',
-				'class': 'btn cbi-button cbi-button-action',
-				'click': function(ev) {
-					ev.preventDefault();
-					var input = document.querySelector('input[type="password"]');
-					if (!input)
-						input = document.getElementById('cbid.wolultra.global.token');
-					if (!input) {
-						var inputs = document.querySelectorAll('input[name$=".token"]');
-						for (var i = 0; i < inputs.length; i++) {
-							if (inputs[i].name.indexOf('cbid.wolultra.') === 0) {
-								input = inputs[i];
-								break;
-							}
-						}
-					}
-					if (input) {
-						var bytes = new Uint8Array(16);
-						crypto.getRandomValues(bytes);
-						input.value = Array.from(bytes).map(function(b) {
-							return ('0' + b.toString(16)).slice(-2);
-						}).join('');
-						input.dispatchEvent(new Event('input', { bubbles: true }));
-						input.dispatchEvent(new Event('change', { bubbles: true }));
-					}
+		/* Use the form API (getOption / getUIElement / setValue) to fill
+		   the token field. DOM lookups (getWidget does not exist, cbid /
+		   name schemes differ) and DummyValue renderWidget overrides
+		   proved unreliable. */
+		o = s.option(form.Button, '_generate_token', _('Generate Token'));
+		o.inputtitle = _('Generate');
+		o.inputstyle = 'action';
+		o.onclick = function(ev, section_id) {
+			var tokenOpt = this.section.getOption('token');
+			var elem = tokenOpt ? tokenOpt.getUIElement(section_id) : null;
+			if (elem) {
+				var bytes = new Uint8Array(16);
+				crypto.getRandomValues(bytes);
+				elem.setValue(Array.from(bytes).map(function(b) {
+					return ('0' + b.toString(16)).slice(-2);
+				}).join(''));
+				if (elem.node) {
+					elem.node.dispatchEvent(new Event('input', { bubbles: true }));
+					elem.node.dispatchEvent(new Event('change', { bubbles: true }));
 				}
-			}, _('Generate'));
+			}
 		};
 
 		s = m.section(form.GridSection, 'macclient', _('Client Settings'));
@@ -308,7 +293,9 @@ return view.extend({
 			ta.style.position = 'fixed';
 			ta.style.opacity = '0';
 			document.body.appendChild(ta);
+			ta.focus();
 			ta.select();
+			ta.setSelectionRange(0, ta.value.length);
 			var ok = false;
 			try {
 				ok = document.execCommand('copy');
