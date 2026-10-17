@@ -130,22 +130,37 @@ return view.extend({
 		o.placeholder = _('Leave empty to disable direct wake links');
 		o.description = _('Used as the <code>?token=</code> suffix in direct wake links, e.g. <code>/cgi-bin/wolultra-wake?mac=AA:BB:CC:DD:EE:FF&token=…</code>');
 
-		o = s.option(form.Button, '_generate_token', _('Generate Token'));
-		o.inputtitle = _('Generate');
-		o.inputstyle = 'action';
-		o.onclick = function(ev, section_id) {
-			var tokenOpt = this.section.getOption('token');
-			var widget = tokenOpt ? tokenOpt.getWidget(section_id) : null;
-			var input = widget ? widget.querySelector('input') : null;
-			if (input) {
-				var bytes = new Uint8Array(16);
-				crypto.getRandomValues(bytes);
-				input.value = Array.from(bytes).map(function(b) {
-					return ('0' + b.toString(16)).slice(-2);
-				}).join('');
-				input.dispatchEvent(new Event('input', { bubbles: true }));
-				input.dispatchEvent(new Event('change', { bubbles: true }));
-			}
+		/* DummyValue + direct DOM handler: form.Button's onclick dispatch and
+		   getWidget() lookup proved unreliable (silent no-op), so the button
+		   finds the token input by its cbid instead of via the form API. */
+		o = s.option(form.DummyValue, '_generate_token', _('Generate Token'));
+		o.renderWidget = function(section_id, option_index, cfgvalue) {
+			return E('button', {
+				'type': 'button',
+				'class': 'btn cbi-button cbi-button-action',
+				'click': function(ev) {
+					ev.preventDefault();
+					var input = document.getElementById('cbid.wolultra.global.token');
+					if (!input) {
+						var inputs = document.querySelectorAll('input[name$=".token"]');
+						for (var i = 0; i < inputs.length; i++) {
+							if (inputs[i].name.indexOf('cbid.wolultra.') === 0) {
+								input = inputs[i];
+								break;
+							}
+						}
+					}
+					if (input) {
+						var bytes = new Uint8Array(16);
+						crypto.getRandomValues(bytes);
+						input.value = Array.from(bytes).map(function(b) {
+							return ('0' + b.toString(16)).slice(-2);
+						}).join('');
+						input.dispatchEvent(new Event('input', { bubbles: true }));
+						input.dispatchEvent(new Event('change', { bubbles: true }));
+					}
+				}
+			}, _('Generate'));
 		};
 
 		s = m.section(form.GridSection, 'macclient', _('Client Settings'));
