@@ -8,6 +8,10 @@
 # "token") and is managed from the LuCI "WOL Plus" page. Anyone holding a
 # link can wake devices, so keep the token secret like a password.
 #
+# GET opens a confirmation page with a Wake button; the wake only happens
+# when the button is pressed (POST), or on GET with &format=json (API use,
+# for scripts that cannot click a button).
+#
 # Response is a Chinese HTML page by default; add &format=json for JSON.
 
 CONFIG=wolplus
@@ -105,6 +109,56 @@ EOF
 	exit 0
 }
 
+confirm_page() {
+	# Confirmation page with a Wake button. Only shown after the token,
+	# device and MAC have all validated (see the checks below), so an
+	# unauthenticated visitor never sees it. The button POSTs the same
+	# parameters back; the actual wake only happens on POST.
+	local action
+	action="${SCRIPT_NAME:-/cgi-bin/wolplus-wake}"
+
+	printf 'Status: 200 OK\n'
+	printf 'Content-Type: text/html; charset=utf-8\n'
+	printf 'Content-Disposition: inline\n'
+	printf 'Cache-Control: no-store\n'
+	printf '\n'
+	cat <<EOF
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>确认唤醒</title>
+<style>body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-width:480px;margin:40px auto;padding:0 16px;color:#222}h1{font-size:22px}.box{border:1px solid #ddd;border-radius:8px;padding:16px;background:#fafafa;line-height:1.8}code{background:#eee;padding:2px 6px;border-radius:4px}.note{color:#666;font-size:14px}.wake-btn{display:block;width:100%;margin-top:20px;padding:14px 0;font-size:18px;font-weight:bold;color:#fff;background:#0a7d2c;border:none;border-radius:8px;cursor:pointer}.wake-btn:active{background:#086623}</style>
+</head>
+<body>
+<h1>确认唤醒</h1>
+<div class="box">
+EOF
+	if [ -n "$host" ]; then
+		cat <<EOF
+设备：<code>$(html_escape "$host")</code><br>
+EOF
+	fi
+	cat <<EOF
+设备 MAC：<code>$(html_escape "$mac")</code><br>
+发出接口：<code>$(html_escape "$iface")</code>
+</div>
+<form method="post" action="$(html_escape "$action")">
+<input type="hidden" name="mac" value="$(html_escape "$mac")">
+<input type="hidden" name="host" value="$(html_escape "$host")">
+<input type="hidden" name="token" value="$(html_escape "$token")">
+<input type="hidden" name="iface" value="$(html_escape "$iface")">
+<input type="hidden" name="format" value="$(html_escape "$format")">
+<button type="submit" class="wake-btn">唤醒</button>
+</form>
+<p class="note">点击“唤醒”后将发送魔术包，设备应在几秒内开机。</p>
+</body>
+</html>
+EOF
+	exit 0
+}
+
 valid_mac() {
 	printf '%s\n' "$1" | grep -Eq '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
 }
@@ -125,17 +179,28 @@ valid_token() {
 
 # --- request ---------------------------------------------------------------
 
-if [ "$REQUEST_METHOD" != "GET" ]; then
-	respond "405 Method Not Allowed" false "只支持 GET 请求" "" ""
+case "$REQUEST_METHOD" in
+	GET|POST) ;;
+	*) respond "405 Method Not Allowed" false "只支持 GET / POST 请求" "" "" ;;
+esac
+
+# Parse parameters: POST body for POST (the confirm form), QUERY_STRING
+# for GET. Both are application/x-www-form-urlencoded, so one parser
+# handles both.
+params="$QUERY_STRING"
+if [ "$REQUEST_METHOD" = "POST" ]; then
+	params=""
+	if [ "$CONTENT_LENGTH" -gt 0 ] 2>/dev/null; then
+		params="$(head -c "$CONTENT_LENGTH" 2>/dev/null)"
+	fi
 fi
 
-# Parse QUERY_STRING into mac / host / token / iface / format
 mac="" host="" token="" iface="" format=""
 old_ifs="$IFS"
 IFS='&'
 set -f
 # shellcheck disable=SC2086
-set -- $QUERY_STRING
+set -- $params
 set +f
 IFS="$old_ifs"
 
@@ -198,6 +263,14 @@ fi
 
 if ! valid_iface "$iface"; then
 	respond "400 Bad Request" false "接口名称无效" "" ""
+fi
+
+# GET (HTML) shows the confirmation page with a Wake button; the actual
+# wake only happens on POST (button press) or on GET with format=json
+# (API use). This keeps link prefetch / preview from waking devices by
+# accident.
+if [ "$REQUEST_METHOD" = "GET" ] && [ "$format" != "json" ]; then
+	confirm_page
 fi
 
 # --- wake ------------------------------------------------------------------
