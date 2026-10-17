@@ -1,0 +1,153 @@
+#!/bin/sh
+# wolultra-wake: token-authenticated direct Wake-on-LAN endpoint (no LuCI login).
+#
+#   http://<router>/cgi-bin/wolultra-wake?mac=AA:BB:CC:DD:EE:FF&token=<token>
+#   http://<router>/cgi-bin/wolultra-wake?host=<name>&token=<token>
+#
+# The token is stored in /etc/config/wolultra (section "global", option
+# "token") and is managed from the LuCI "WOL Ultra" page. Anyone holding a
+# link can wake devices, so keep the token secret like a password.
+
+CONFIG=wolultra
+ETHERWAKE=/usr/bin/etherwake
+
+[ -f /lib/functions.sh ] && . /lib/functions.sh
+
+# URL-decode the sequences that can legitimately appear in our parameters
+# (MAC from encodeURIComponent, host names, token). Selective on purpose:
+# printf '%b' with \xHH behaves differently across dash / busybox ash, so
+# this uses plain sed replacements only, verified on both. Anything else
+# stays encoded and fails validation downstream (fail-closed).
+# NOTE: %25 -> % must stay last, and %2B -> + must come after '+ ' -> ' '.
+urldecode() {
+	printf '%s' "$1" | sed \
+		-e 's/+/ /g' \
+		-e 's/%20/ /g' \
+		-e 's/%3[Aa]/:/g' \
+		-e 's/%2[Ff]/\//g' \
+		-e 's/%3[Ff]/?/g' \
+		-e 's/%26/\&/g' \
+		-e 's/%3[Dd]/=/g' \
+		-e 's/%2[Bb]/+/g' \
+		-e 's/%25/%/g'
+}
+
+json_escape() {
+	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | tr -d '\n\r\t'
+}
+
+respond() {
+	local status="$1" success="$2" message="$3" mac="$4" iface="$5"
+	printf 'Status: %s\r\n' "$status"
+	printf 'Content-Type: application/json\r\n'
+	printf 'Cache-Control: no-store\r\n'
+	printf '\r\n'
+	printf '{"success":%s,"error":"%s","mac":"%s","iface":"%s"}' \
+		"$success" "$(json_escape "$message")" "$(json_escape "$mac")" "$(json_escape "$iface")"
+	exit 0
+}
+
+valid_mac() {
+	printf '%s\n' "$1" | grep -Eq '^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+}
+
+valid_iface() {
+	case "$1" in
+		''|*[!A-Za-z0-9_.:-]*) return 1 ;;
+		*) return 0 ;;
+	esac
+}
+
+valid_token() {
+	case "$1" in
+		''|*[!A-Za-z0-9_-]*) return 1 ;;
+		*) return 0 ;;
+	esac
+}
+
+# --- request ---------------------------------------------------------------
+
+if [ "$REQUEST_METHOD" != "GET" ]; then
+	respond "405 Method Not Allowed" false "method not allowed" "" ""
+fi
+
+# Parse QUERY_STRING into mac / host / token / iface
+mac="" host="" token="" iface=""
+old_ifs="$IFS"
+IFS='&'
+set -f
+# shellcheck disable=SC2086
+set -- $QUERY_STRING
+set +f
+IFS="$old_ifs"
+
+for pair in "$@"; do
+	key="${pair%%=*}"
+	val="${pair#*=}"
+	[ "$key" = "$pair" ] && val=""
+	val="$(urldecode "$val")"
+	case "$key" in
+		mac) mac="$val" ;;
+		host) host="$val" ;;
+		token) token="$val" ;;
+		iface) iface="$val" ;;
+	esac
+done
+
+# --- token check -----------------------------------------------------------
+
+configured="$(uci get "$CONFIG.global.token" 2>/dev/null)"
+
+if [ -z "$configured" ]; then
+	respond "403 Forbidden" false "token not configured" "" ""
+fi
+
+if ! valid_token "$token" || [ "$token" != "$configured" ]; then
+	respond "403 Forbidden" false "invalid token" "" ""
+fi
+
+# --- resolve target --------------------------------------------------------
+
+if [ -n "$host" ]; then
+	# Look up the macclient section by name
+	found_mac=""; found_iface=""
+	lookup_host() {
+		local section="$1"
+		local name macaddr maceth
+		config_get name "$section" name ""
+		if [ "$name" = "$host" ]; then
+			config_get macaddr "$section" macaddr ""
+			config_get maceth "$section" maceth "br-lan"
+			found_mac="$macaddr"
+			found_iface="$maceth"
+		fi
+	}
+	config_load "$CONFIG"
+	config_foreach lookup_host macclient
+	if [ -z "$found_mac" ]; then
+		respond "404 Not Found" false "unknown host" "" ""
+	fi
+	mac="$found_mac"
+	[ -z "$iface" ] && iface="$found_iface"
+fi
+
+[ -z "$iface" ] && iface="br-lan"
+
+if ! valid_mac "$mac"; then
+	respond "400 Bad Request" false "invalid mac address" "" ""
+fi
+
+if ! valid_iface "$iface"; then
+	respond "400 Bad Request" false "invalid interface" "" ""
+fi
+
+# --- wake ------------------------------------------------------------------
+
+output="$("$ETHERWAKE" -b -D -i "$iface" "$mac" 2>&1)"
+rc=$?
+
+if [ "$rc" -ne 0 ]; then
+	respond "500 Internal Server Error" false "etherwake failed: $output" "$mac" "$iface"
+fi
+
+respond "200 OK" true "" "$mac" "$iface"

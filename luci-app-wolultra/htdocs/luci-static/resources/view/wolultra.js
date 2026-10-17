@@ -121,6 +121,33 @@ return view.extend({
 		m = new form.Map('wolultra', _('WOL Ultra'),
 			_('Wake local network devices immediately or on an individual schedule. — AI Edition'));
 
+		s = m.section(form.NamedSection, 'global', 'global', _('Global Settings'),
+			_('Direct wake links let you wake a device with a single URL, without logging in to LuCI. Keep the token secret: anyone holding the link can wake devices.'));
+
+		o = s.option(form.Value, 'token', _('Wake Token'));
+		o.password = true;
+		o.rmempty = true;
+		o.placeholder = _('Leave empty to disable direct wake links');
+		o.description = _('Used as the <code>?token=</code> suffix in direct wake links, e.g. <code>/cgi-bin/wolultra-wake?mac=AA:BB:CC:DD:EE:FF&token=…</code>');
+
+		o = s.option(form.Button, '_generate_token', _('Generate Token'));
+		o.inputtitle = _('Generate');
+		o.inputstyle = 'action';
+		o.onclick = function(ev, section_id) {
+			var tokenOpt = this.section.getOption('token');
+			var widget = tokenOpt ? tokenOpt.getWidget(section_id) : null;
+			var input = widget ? widget.querySelector('input') : null;
+			if (input) {
+				var bytes = new Uint8Array(16);
+				crypto.getRandomValues(bytes);
+				input.value = Array.from(bytes).map(function(b) {
+					return ('0' + b.toString(16)).slice(-2);
+				}).join('');
+				input.dispatchEvent(new Event('input', { bubbles: true }));
+				input.dispatchEvent(new Event('change', { bubbles: true }));
+			}
+		};
+
 		s = m.section(form.GridSection, 'macclient', _('Client Settings'));
 		s.anonymous = true;
 		s.addremove = true;
@@ -179,9 +206,18 @@ return view.extend({
 				})
 			}, _('Wake'));
 
+			var linkButton = E('button', {
+				'type': 'button',
+				'class': 'btn cbi-button cbi-button-action',
+				'click': ui.createHandlerFn(this, function() {
+					return view.handleCopyLink(section_id);
+				})
+			}, _('Copy Link'));
+
 			if (buttonContainer) {
 				var editButton = buttonContainer.querySelector('.cbi-button-edit');
 				buttonContainer.insertBefore(wakeButton, editButton || buttonContainer.firstChild);
+				buttonContainer.insertBefore(linkButton, editButton || buttonContainer.firstChild);
 			}
 
 			return defaultButtons;
@@ -215,6 +251,39 @@ return view.extend({
 		}).catch(function(err) {
 			ui.addNotification(null, E('p', _('Wake command failed: %s.').format(err.message || err)), 'error');
 		});
+	},
+
+	handleCopyLink: function(section_id) {
+		var mac = uci.get('wolultra', section_id, 'macaddr');
+		var token = uci.get('wolultra', 'global', 'token');
+
+		if (!mac) {
+			ui.addNotification(null, E('p', _('Please save the client before copying its wake link.')), 'error');
+			return Promise.resolve();
+		}
+
+		if (!token) {
+			ui.addNotification(null, E('p', _('Please set a wake token in Global Settings first.')), 'error');
+			return Promise.resolve();
+		}
+
+		var url = window.location.origin + '/cgi-bin/wolultra-wake?mac=' +
+			encodeURIComponent(mac) + '&token=' + encodeURIComponent(token);
+
+		var done = function() {
+			ui.addNotification(null, E('p', [
+				_('Wake link copied: '), E('code', url)
+			]), 'info');
+		};
+
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			return navigator.clipboard.writeText(url).then(done).catch(function() {
+				window.prompt(_('Copy the wake link:'), url);
+			});
+		}
+
+		window.prompt(_('Copy the wake link:'), url);
+		return Promise.resolve();
 	},
 
 	handleSaveApply: function(ev, mode) {
