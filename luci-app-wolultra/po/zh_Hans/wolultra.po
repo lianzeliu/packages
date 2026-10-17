@@ -149,7 +149,8 @@ msgstr "唤醒链接已复制："
 
 #: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:122
 msgid ""
-"Wake local network devices immediately or on an individual schedule. "
+"Wake local network devices immediately or on an individual schedule. — AI "
+"Edition"
 msgstr "立即唤醒局域网设备，或为每台设备设置独立的定时唤醒任务。"
 
 #: luci-app-wolultra/htdocs/luci-static/resources/view/wolultra.js:91
