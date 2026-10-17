@@ -275,9 +275,7 @@ return view.extend({
 			encodeURIComponent(mac) + '&token=' + encodeURIComponent(token);
 
 		var done = function() {
-			ui.addNotification(null, E('p', [
-				_('Wake link copied: '), E('code', url)
-			]), 'info');
+			ui.addNotification(null, E('p', _('Copied successfully')), 'info');
 		};
 
 		var failed = function() {

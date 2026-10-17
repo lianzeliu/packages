@@ -17,6 +17,10 @@ msgstr "客户端设置"
 msgid "Control"
 msgstr "管控"
 
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:278
+msgid "Copied successfully"
+msgstr "复制成功"
+
 #: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:234
 msgid "Copy Link"
 msgstr "复制链接"
@@ -141,10 +145,6 @@ msgstr "唤醒命令执行完成，返回码为 %d。"
 #: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:271
 msgid "Wake command failed: %s."
 msgstr "唤醒命令执行失败：%s。"
-
-#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:294
-msgid "Wake link copied: "
-msgstr "唤醒链接已复制："
 
 #: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:122
 msgid ""

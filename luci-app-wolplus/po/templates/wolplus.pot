@@ -9,6 +9,10 @@ msgstr ""
 msgid "Control"
 msgstr ""
 
+#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:278
+msgid "Copied successfully"
+msgstr ""
+
 #: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:234
 msgid "Copy Link"
 msgstr ""
@@ -132,10 +136,6 @@ msgstr ""
 
 #: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:271
 msgid "Wake command failed: %s."
-msgstr ""
-
-#: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:294
-msgid "Wake link copied: "
 msgstr ""
 
 #: luci-app-wolplus/htdocs/luci-static/resources/view/wolplus.js:122
