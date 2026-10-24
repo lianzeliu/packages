@@ -4,33 +4,39 @@ function inInterfaces(host) {
 	return(interfaces ~ "(^| )" host "($| )")
 }
 
-function newRule(arp_ip, ipt_cmd) {
-	# checking for existing rules shouldn't be necessary if newRule is
-	# always called after db is read, arp table is read, and existing
-	# iptables rules are read.
-	ipt_cmd=iptKey " -t mangle -j RETURN -s " arp_ip
-	system(ipt_cmd " -C RRDIPT_FORWARD 2>/dev/null || " ipt_cmd " -A RRDIPT_FORWARD")
-	ipt_cmd=iptKey " -t mangle -j RETURN -d " arp_ip
-	system(ipt_cmd " -C RRDIPT_FORWARD 2>/dev/null || " ipt_cmd " -A RRDIPT_FORWARD")
+function newRule(arp_ip) {
+	# nft 版：给新主机在 RRDIPT_FORWARD 里加 -s / -d 两条计数规则。
+	# 正常情况下不会重复调用（已有规则的主机在计数解析里已经从
+	# hosts 里删掉），但 nft 允许重复规则、重复了会算两遍，所以
+	# 这里仍按本轮的 nft dump（nftRaw，由 wrtbwmon 传入）查一遍再加。
+	# nftRaw 为空（比如只读 DB 的那次调用）时不查，直接加。
+	if (nftRaw != "") {
+		system("grep -Fq '" nftAddr " saddr " arp_ip " ' " nftRaw " 2>/dev/null || nft add rule " nftFam " wrtbwmon RRDIPT_FORWARD " nftAddr " saddr " arp_ip " counter return 2>/dev/null")
+		system("grep -Fq '" nftAddr " daddr " arp_ip " ' " nftRaw " 2>/dev/null || nft add rule " nftFam " wrtbwmon RRDIPT_FORWARD " nftAddr " daddr " arp_ip " counter return 2>/dev/null")
+	} else {
+		system("nft add rule " nftFam " wrtbwmon RRDIPT_FORWARD " nftAddr " saddr " arp_ip " counter return 2>/dev/null")
+		system("nft add rule " nftFam " wrtbwmon RRDIPT_FORWARD " nftAddr " daddr " arp_ip " counter return 2>/dev/null")
+	}
 }
 
-function delRule(arp_ip, ipt_cmd) {
-	ipt_cmd=iptKey " -t mangle -D RRDIPT_FORWARD -j RETURN "
-	system(ipt_cmd "-s " arp_ip " 2>/dev/null")
-	system(ipt_cmd "-d " arp_ip " 2>/dev/null")
-}
+# 注意：原来这里的 delRule 在 nft 版里删掉了。nft 不能按匹配条件删
+# 规则，只能按 handle 删，awk 里拿不到可靠的 handle；过期规则改由
+# wrtbwmon 的 pruneNftRules() 在本轮结束后按 handle 统一清。
 
 function total(i) {
 	return(bw[i "/in"] + bw[i "/out"])
 }
 
 BEGIN {
+	# 9 字段格式不变：wrtbwmon 先把 nft dump 转成和原来 iptables
+	# -nvxL 一样的行再喂进来，所以下面计数解析一行都不用改。
+	iptNF	= 9
 	if (ipv6) {
-		iptNF	= 9
-		iptKey	= "ip6tables"
+		nftFam	= "ip6"
+		nftAddr	= "ip6"
 	} else {
-		iptNF	= 9
-		iptKey	= "iptables"
+		nftFam	= "ip"
+		nftAddr	= "ip"
 	}
 }
 
@@ -111,7 +117,7 @@ ARGIND==2 {
 # network to rule creation. The "unnact" rules would have to be
 # maintained at the end of the list, and new rules would be inserted
 # at the top.
-ARGIND==3 && NF==iptNF && $1!="pkts" { # iptables input
+ARGIND==3 && NF==iptNF && $1!="pkts" { # nft 转成的 9 字段增量行，格式同原来 iptables -nvxL
 	if (ipv6) {
 		lfn = 6
 		tag = "::/0"
@@ -206,8 +212,8 @@ END {
 		}
 	}
 
-	# for hosts without rules
+	# for hosts without rules: 只建新规则。过期规则不在这里删，
+	# 由 wrtbwmon 的 pruneNftRules() 按 handle 清（见上面注释）。
 	for (i in hosts)
 		if (hosts[i]) newRule(i)
-		else delRule(i)
 }

@@ -162,35 +162,153 @@ unlockFunc() {
 	[ -n "$DEBUG" ] && echo ${updatePID} "released lock"
 }
 
-# chain
-newChain() {
-	local chain=$1
-	local ipt=$2
-	# Create the RRDIPT_$chain chain (it doesn't matter if it already exists).
+# nftables 版：每个地址族一张表（ip / ip6），链结构和原来 iptables
+# mangle 版一样，只换计数后端。base 链（input/output/forward，优先级
+# mangle）只跳一次到 RRDIPT_* 计数链。重复添加 base 链会多出一条 jump
+# 导致重复计数，所以表只在缺失时整批创建，绝不在已有表上重复加 base 链。
+ensureNftTable() {
+	local fam=$1
+	local need=0
+	local c
 
-	$ipt -t mangle -N RRDIPT_$chain 2> /dev/null
-
-	# Add the RRDIPT_$chain CHAIN to the $chain chain if not present
-	$ipt -t mangle -C $chain -j RRDIPT_$chain 2>/dev/null
-	if [ $? -ne 0 ]; then
-		[ -n "$DEBUG" ] && echo "DEBUG: $ipt chain misplaced, recreating it..."
-		$ipt -t mangle -I $chain -j RRDIPT_$chain
+	nft list table $fam wrtbwmon >/dev/null 2>&1 || need=1
+	if [ $need -eq 0 ]; then
+		for c in input output forward; do
+			nft list chain $fam wrtbwmon $c >/dev/null 2>&1 || need=1
+		done
+		nft list chain $fam wrtbwmon input 2>/dev/null | grep -Fq "jump RRDIPT_INPUT" || need=1
+		nft list chain $fam wrtbwmon output 2>/dev/null | grep -Fq "jump RRDIPT_OUTPUT" || need=1
+		nft list chain $fam wrtbwmon forward 2>/dev/null | grep -Fq "jump RRDIPT_FORWARD" || need=1
+	fi
+	if [ $need -eq 1 ]; then
+		# 计数器就在这张表里，重建表会清零计数器；
+		# nftDumpToDelta 会把因此产生的负增量钳到 0。
+		nft delete table $fam wrtbwmon 2>/dev/null
+		nft -f - <<EOF
+table $fam wrtbwmon {
+	chain RRDIPT_INPUT {
+	}
+	chain RRDIPT_OUTPUT {
+	}
+	chain RRDIPT_FORWARD {
+	}
+	chain input {
+		type filter hook input priority mangle; policy accept;
+		jump RRDIPT_INPUT
+	}
+	chain output {
+		type filter hook output priority mangle; policy accept;
+		jump RRDIPT_OUTPUT
+	}
+	chain forward {
+		type filter hook forward priority mangle; policy accept;
+		jump RRDIPT_FORWARD
+	}
+}
+EOF
 	fi
 }
 
-# chain tun
+# 接口计数规则（nft）：INPUT 用 iifname，OUTPUT 用 oifname。
+# 先查有没有再加：nft 允许重复规则，重复了会把这个接口算两遍。
 newRuleIF() {
 	local chain=$1
 	local IF=$2
-	local ipt=$3
-	local cmd=
+	local fam=$3
 
 	if [ "$chain" = "OUTPUT" ]; then
-		cmd="$ipt -t mangle -o $IF -j RETURN"
+		nft list chain $fam wrtbwmon RRDIPT_OUTPUT 2>/dev/null | grep -Fq "oifname \"$IF\"" || \
+			nft add rule $fam wrtbwmon RRDIPT_OUTPUT oifname "$IF" counter return 2>/dev/null
 	elif [ "$chain" = "INPUT" ]; then
-		cmd="$ipt -t mangle -i $IF -j RETURN"
+		nft list chain $fam wrtbwmon RRDIPT_INPUT 2>/dev/null | grep -Fq "iifname \"$IF\"" || \
+			nft add rule $fam wrtbwmon RRDIPT_INPUT iifname "$IF" counter return 2>/dev/null
 	fi
-	[ -n "$cmd" ] && eval $cmd " -C RRDIPT_$chain 2>/dev/null" || eval $cmd " -A RRDIPT_$chain"
+}
+
+# 把一个地址族的 nft 计数 dump 转成 readDB.awk 一直解析的 9 字段行
+#（pkts bytes target prot opt in out source destination），字节已经算
+# 成本轮增量。nft 计数器是累计值，这里绝不 reset：原来 iptables -Z
+# 那套不照搬，因为 reset 一旦静默失败，后面每轮都会把累计值重算一遍
+#（clientstatus 那次平方级暴涨的教训）。改用 $tmpDir/last4 / last6
+# 存每条规则上次的字节数：
+#   增量 = 当前 - 上次，回退时钳到 0；
+#   第一次见到的 key 直接算当前值，正好是它规则建好以来（上一轮末尾
+#   建的，起点是 0）的流量；ending() 删表时会连 $tmpDir 里的 last
+#   文件一起清掉，两边不会错位。
+# 参数：$1 = 地址族（ip/ip6），$2 = nft 原始 dump，$3 = last 文件，$4 = 增量文件
+nftDumpToDelta() {
+	local fam=$1
+	local raw=$2
+	local last=$3
+	local out=$4
+	local tag="0.0.0.0/0"
+	[ "$fam" = "ip6" ] && tag="::/0"
+	[ -f "$last" ] || : > "$last"
+	# 注意：last 文件不能用 FNR==NR 当第一个输入文件读——它第一轮
+	# 是空的，空文件会让第二文件的 FNR 也等于 NR，整轮都会被当成
+	# last 读掉、一条增量都出不来。所以 last 在 BEGIN 里用 getline 读。
+	awk -v fam="$fam" -v tag="$tag" -v lastfile="$last" '
+		BEGIN {
+			while ((getline line < lastfile) > 0) {
+				n=split(line, a, " ")
+				if (n >= 2 && a[1] != "") last[a[1]]=a[2]
+			}
+			close(lastfile)
+		}
+		/counter/ {
+			pkts="0"; bytes="0"; key=""; src=tag; dst=tag; inf="*"; outf="*"
+			for (i=1; i<=NF; i++) {
+				if ($i == "packets") pkts=$(i+1)
+				if ($i == "bytes") bytes=$(i+1)
+				if ($i == "saddr") { addr=$(i+1); key="s:" addr; src=addr }
+				if ($i == "daddr") { addr=$(i+1); key="d:" addr; dst=addr }
+				if ($i == "iifname") { inf=$(i+1); gsub(/"/, "", inf); key="i:" inf }
+				if ($i == "oifname") { outf=$(i+1); gsub(/"/, "", outf); key="o:" outf }
+			}
+			if (key == "") next
+			cur[key]=bytes
+			if (key in last) {
+				delta=bytes-last[key]
+				if (delta < 0) delta=0
+			} else {
+				delta=bytes
+			}
+			print pkts, delta, "RETURN", "all", "--", inf, outf, src, dst
+		}
+		END {
+			for (k in cur) print k, cur[k] > (lastfile ".new")
+		}
+	' "$raw" > "$out"
+	[ -f "$last.new" ] && mv "$last.new" "$last"
+}
+
+# 删过期 per-IP 规则：nft 不能按匹配条件删，只能按 handle 删。
+# 由 update() 在 readDB.awk 跑完、清 tmp 之前调用，传入该地址族当前
+# 有效的 ARP IP 清单。
+# 参数：$1 = 地址族（ip/ip6），$2 = 地址关键字（ip/ip6），$3 = 有效 IP 清单文件
+pruneNftRules() {
+	local fam=$1
+	local addr=$2
+	local valid=$3
+	local handles
+	handles=$(nft -a list chain $fam wrtbwmon RRDIPT_FORWARD 2>/dev/null | awk -v valid="$valid" '
+		BEGIN {
+			while ((getline line < valid) > 0) {
+				if (line ~ /^[0-9a-fA-F:.]+$/) arp[line]=1
+			}
+		}
+		/counter/ {
+			ip=""
+			for (i=1; i<=NF; i++) {
+				if ($i == "saddr" || $i == "daddr") ip=$(i+1)
+			}
+			if (ip != "" && !(ip in arp)) print $NF
+		}
+	')
+	[ -n "$handles" ] || return 0
+	for h in $handles; do
+		nft delete rule $fam wrtbwmon RRDIPT_FORWARD handle $h 2>/dev/null
+	done
 }
 
 publish() {
@@ -254,35 +372,37 @@ update() {
 	checkWAN $wan
 	interfaces="$interfaces $wan"
 
-	[ "$for46" = 4 ] && IPT='iptables'
-	[ "$for46" = 6 ] && IPT='ip6tables'
-	[ "$for46" = 46 ] && IPT='iptables ip6tables'
+	[ "$for46" = 4 ] && FAMS='ip'
+	[ "$for46" = 6 ] && FAMS='ip6'
+	[ "$for46" = 46 ] && FAMS='ip ip6'
 
-	for ii in $IPT ; do
-		if [ -z "$( ${ii}-save | grep RRDIPT )" ]; then
+	for fam in $FAMS ; do
+		ensureNftTable $fam
 
-			for chain in $chains; do
-				newChain $chain $ii
+		# 本机流量：INPUT/OUTPUT 接口规则，每轮都补一次（grep 去重），
+		# WAN 口变了也能跟上，不用等表重建。
+		for chain in INPUT OUTPUT; do
+			for interface in $interfaces; do
+				[ -n "$interface" ] && [ -e "/sys/class/net/$interface" ] && newRuleIF $chain $interface $fam
 			done
-
-			# track local data
-			for chain in INPUT OUTPUT; do
-				for interface in $interfaces; do
-					[ -n "$interface" ] && [ -e "/sys/class/net/$interface" ] && newRuleIF $chain $interface $ii
-				done
-			done
-		fi
-		# this will add rules for hosts in arp table
-		> $tmpDir/${ii}_${updatePID}.tmp
-
-		for chain in $chains; do
-			$ii -nvxL RRDIPT_$chain -t mangle -Z >> $tmpDir/${ii}_${updatePID}.tmp
 		done
+
+		# 抓本轮累计计数，再转成增量。增量文件名沿用原来的
+		# iptables_/ip6tables_ 名字，这样下面 readDB.awk 的调用不用改。
+		> $tmpDir/nftraw_${fam}_${updatePID}.tmp
+		for chain in $chains; do
+			nft list chain $fam wrtbwmon RRDIPT_$chain 2>/dev/null >> $tmpDir/nftraw_${fam}_${updatePID}.tmp
+		done
+		if [ "$fam" = "ip" ]; then
+			nftDumpToDelta $fam $tmpDir/nftraw_${fam}_${updatePID}.tmp $tmpDir/last4 $tmpDir/iptables_${updatePID}.tmp
+		else
+			nftDumpToDelta $fam $tmpDir/nftraw_${fam}_${updatePID}.tmp $tmpDir/last6 $tmpDir/ip6tables_${updatePID}.tmp
+		fi
 	done
 
 	[ -f $tmpDir/iptables_${updatePID}.tmp ] && (
 		awk -v mode="$mode" -v interfaces="$interfaces" -v wanIF="$wan" -v interval=$interval4 \
-		-v ipv6="0" -f $binDir/readDB.awk \
+		-v ipv6="0" -v nftRaw="$tmpDir/nftraw_ip_${updatePID}.tmp" -f $binDir/readDB.awk \
 		$DB \
 		/proc/net/arp \
 		$tmpDir/iptables_${updatePID}.tmp
@@ -293,11 +413,22 @@ update() {
 		`ip -6 neigh >> $tmpDir/ip6addr_${updatePID}.tmp`;
 
 		awk -v mode="$mode" -v interfaces="$interfaces" -v wanIF="$wan" -v interval=$interval6 \
-		-v ipv6="1" -f $binDir/readDB.awk \
+		-v ipv6="1" -v nftRaw="$tmpDir/nftraw_ip6_${updatePID}.tmp" -f $binDir/readDB.awk \
 		"$DB6" \
 		$tmpDir/ip6addr_${updatePID}.tmp \
 		$tmpDir/ip6tables_${updatePID}.tmp
 	)
+
+	# 删过期规则：nft 只能按 handle 删，readDB.awk 里做不了，
+	# 所以放这里按 handle 清。只清本轮跑过的地址族。
+	if [ -f $tmpDir/iptables_${updatePID}.tmp ]; then
+		awk 'NR>1 && $3 != "0x0" {print $1}' /proc/net/arp > $tmpDir/arpips4_${updatePID}.tmp
+		pruneNftRules ip ip $tmpDir/arpips4_${updatePID}.tmp
+	fi
+	if [ -f $tmpDir/ip6tables_${updatePID}.tmp ] && [ -f $tmpDir/ip6addr_${updatePID}.tmp ]; then
+		awk '$6 != "FAILED" && $6 != "INCOMPLETE" && substr($1,1,1) != "f" && substr($1,1,1) != "d" {print $1}' $tmpDir/ip6addr_${updatePID}.tmp > $tmpDir/arpips6_${updatePID}.tmp
+		pruneNftRules ip6 ip6 $tmpDir/arpips6_${updatePID}.tmp
+	fi
 
 	[ "$Monitor46" = 46 ] && (
 		cp $DB $DB46
@@ -319,8 +450,10 @@ renamefile() {
 }
 
 ending() {
-	iptables-save | grep -v RRDIPT | iptables-restore
-	ip6tables-save | grep -v RRDIPT | ip6tables-restore
+	# 整张表删掉就是清理，比原来 iptables-save 过滤 RRDIPT 再 restore 更干净。
+	# $tmpDir 一起清掉，last4/last6 也随之失效，下次启动计数从 0 开始，不会错位。
+	nft delete table ip wrtbwmon 2>/dev/null
+	nft delete table ip6 wrtbwmon 2>/dev/null
 
 	if checkPid $pidFile; then
 		local pid=$( cat $pidFile )
