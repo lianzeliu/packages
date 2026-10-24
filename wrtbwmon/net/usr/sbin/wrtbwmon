@@ -160,6 +160,11 @@ unlockFunc() {
 
 	rm -f $lockFile
 	[ -n "$DEBUG" ] && echo ${updatePID} "released lock"
+	# 注意：上面那句 DEBUG 为空时测试本身返回 1，原脚本就这样，
+	# 导致 update() 最后返回 1、单次调用 exit 1。LuCI 页面每轮先跑
+	# 一次单次调用，exec_direct 遇到失败就不再往下读 DB，所以这里
+	# 必须明确返回 0，不能让最后一个测试命令决定退出码。
+	return 0
 }
 
 # nftables 版：每个地址族一张表（ip / ip6），链结构和原来 iptables
@@ -440,6 +445,7 @@ update() {
 
 	rm -f $tmpDir/*_${updatePID}.tmp
 	unlockFunc
+	return 0
 }
 
 renamefile() {
