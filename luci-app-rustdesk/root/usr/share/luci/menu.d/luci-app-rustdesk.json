@@ -1,0 +1,13 @@
+{
+	"admin/services/rustdesk": {
+		"title": "RustDesk Server",
+		"action": {
+			"type": "view",
+			"path": "rustdesk"
+		},
+		"depends": {
+			"acl": [ "luci-app-rustdesk" ],
+			"uci": { "rustdesk": true }
+		}
+	}
+}

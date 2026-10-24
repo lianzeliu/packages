@@ -4,7 +4,7 @@
 
 include $(TOPDIR)/rules.mk
 
-PKG_NAME:=rustdesk-s
+PKG_NAME:=rustdesk
 PKG_VERSION:=1.1.16
 PKG_RELEASE:=1
 
@@ -22,32 +22,32 @@ PKG_BUILD_PARALLEL:=1
 include $(INCLUDE_DIR)/package.mk
 include $(TOPDIR)/feeds/packages/lang/rust/rust-package.mk
 
-define Package/rustdesk-s
+define Package/rustdesk
   SECTION:=net
   CATEGORY:=Network
   TITLE:=RustDesk Server Program
   DEPENDS:=@(aarch64||arm||x86_64) @(!arm||TARGET_bcm53xx||HAS_FPU)
   URL:=https://rustdesk.com/server
-  USERID:=rustdesk-s:rustdesk-s
+  USERID:=rustdesk:rustdesk
 endef
 
-define Package/rustdesk-s/description
+define Package/rustdesk/description
   Self-host your own RustDesk server, it is free and open source.
 endef
 
-define Package/rustdesk-s/conffiles
-/etc/config/rustdesk-s
-/etc/rustdesk-s
+define Package/rustdesk/conffiles
+/etc/config/rustdesk
+/etc/rustdesk
 endef
 
-define Package/rustdesk-s/install
+define Package/rustdesk/install
 	$(INSTALL_DIR) $(1)/usr/bin/
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/bin/{hbbr,hbbs} $(1)/usr/bin/
 	$(INSTALL_DIR) $(1)/etc/config
-	$(INSTALL_CONF) ./files/rustdesk-s.conf $(1)/etc/config/rustdesk-s
+	$(INSTALL_CONF) ./files/rustdesk.conf $(1)/etc/config/rustdesk
 	$(INSTALL_DIR) $(1)/etc/init.d
-	$(INSTALL_BIN) ./files/rustdesk-s.init $(1)/etc/init.d/rustdesk-s
+	$(INSTALL_BIN) ./files/rustdesk.init $(1)/etc/init.d/rustdesk
 endef
 
-$(eval $(call RustBinPackage,rustdesk-s))
-$(eval $(call BuildPackage,rustdesk-s))
+$(eval $(call RustBinPackage,rustdesk))
+$(eval $(call BuildPackage,rustdesk))

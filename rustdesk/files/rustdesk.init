@@ -3,9 +3,9 @@
 USE_PROCD=1
 START=99
 
-CONF="rustdesk-s"
-RUNDIR="/var/run/rustdesk-s"
-WORKDIR="/etc/rustdesk-s"
+CONF="rustdesk"
+RUNDIR="/var/run/rustdesk"
+WORKDIR="/etc/rustdesk"
 
 start_service() {
 	local auto_fw global_key global_port
@@ -32,10 +32,10 @@ start_service() {
 
 	for dir in "$RUNDIR" "$WORKDIR"; do
 		if [ ! -d "$dir" ] && ! mkdir -p "$dir"; then
-			logger -p daemon.error -t "rustdesk-s" "Failed to create working directory: $dir"
+			logger -p daemon.error -t "rustdesk" "Failed to create working directory: $dir"
 			return 1
 		fi
-		chown -R rustdesk-s:rustdesk-s "$dir"
+		chown -R rustdesk:rustdesk "$dir"
 	done
 
 	if [ "$hbbr_enabled" -eq "1" ]; then
@@ -53,12 +53,12 @@ start_service() {
 
 		procd_add_jail hbbr log procfs sysfs
 		procd_add_jail_mount "/etc/ssl/"
-		procd_add_jail_mount_rw "/etc/rustdesk-s/"
-		procd_add_jail_mount_rw "/var/run/rustdesk-s/"
+		procd_add_jail_mount_rw "/etc/rustdesk/"
+		procd_add_jail_mount_rw "/var/run/rustdesk/"
 
 		procd_set_param respawn
-		procd_set_param user rustdesk-s
-		procd_set_param group rustdesk-s
+		procd_set_param user rustdesk
+		procd_set_param group rustdesk
 
 		if [ "$auto_fw" -eq "1" ]; then
 			hbbr_tcp_ports="$(( global_port + 1 ))"
@@ -90,12 +90,12 @@ start_service() {
 		
 		procd_add_jail hbbs log procfs sysfs
 		procd_add_jail_mount "/etc/ssl/"
-		procd_add_jail_mount_rw "/etc/rustdesk-s/"
-		procd_add_jail_mount_rw "/var/run/rustdesk-s/"
+		procd_add_jail_mount_rw "/etc/rustdesk/"
+		procd_add_jail_mount_rw "/var/run/rustdesk/"
 
 		procd_set_param respawn
-		procd_set_param user rustdesk-s
-		procd_set_param group rustdesk-s
+		procd_set_param user rustdesk
+		procd_set_param group rustdesk
 
 		if [ "$auto_fw" -eq "1" ]; then
 			hbbs_tcp_ports="$(( global_port - 1 )) $global_port"
@@ -105,7 +105,7 @@ start_service() {
 			json_add_array firewall
 				json_add_object ""
 				json_add_string type rule
-				json_add_string name "Allow-rustdesk-s-tcp"
+				json_add_string name "Allow-rustdesk-tcp"
 				json_add_string proto "tcp"
 				json_add_string src "*"
 				json_add_string dest_port "$hbbs_tcp_ports"
@@ -114,7 +114,7 @@ start_service() {
 
 				json_add_object ""
 				json_add_string type rule
-				json_add_string name "Allow-rustdesk-s-udp"
+				json_add_string name "Allow-rustdesk-udp"
 				json_add_string proto "udp"
 				json_add_string src "*"
 				json_add_string dest_port "$hbbs_udp_ports"

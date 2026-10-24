@@ -5,7 +5,7 @@
 include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=LuCI support for RustDesk Server
-LUCI_DEPENDS:=+rustdesk-s
+LUCI_DEPENDS:=+rustdesk
 
 PKG_LICENSE:=Apache-2.0
 PKG_MAINTAINER:=Tianling Shen <cnsztl@immortalwrt.org>

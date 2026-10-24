@@ -14,10 +14,10 @@ const callServiceList = rpc.declare({
 });
 
 function getServiceStatus() {
-	return L.resolveDefault(callServiceList('rustdesk-s'), {}).then(function(res) {
+	return L.resolveDefault(callServiceList('rustdesk'), {}).then(function(res) {
 		const status = {
-			hbbs: res?.['rustdesk-s']?.['instances']?.['hbbs']?.['running'],
-			hbbr: res?.['rustdesk-s']?.['instances']?.['hbbr']?.['running']
+			hbbs: res?.['rustdesk']?.['instances']?.['hbbs']?.['running'],
+			hbbr: res?.['rustdesk']?.['instances']?.['hbbr']?.['running']
 		};
 		return status;
 	});
@@ -41,7 +41,7 @@ return view.extend({
 	render() {
 		let m, s, o;
 
-		m = new form.Map('rustdesk-s', _('RustDesk Server'));
+		m = new form.Map('rustdesk', _('RustDesk Server'));
 
 		s = m.section(form.TypedSection);
 		s.anonymous = true;
@@ -63,7 +63,7 @@ return view.extend({
 			]);
 		}
 
-		s = m.section(form.NamedSection, 'global', 'rustdesk-s', _('Global settings'));
+		s = m.section(form.NamedSection, 'global', 'rustdesk', _('Global settings'));
 
 		o = s.option(form.Value, 'port', _('Listen port'));
 		o.datatype = 'port';
@@ -74,7 +74,7 @@ return view.extend({
 
 		o = s.option(form.Flag, 'auto_fw', _('Allow connection from Internet'));
 
-		s = m.section(form.NamedSection, 'hbbs', 'rustdesk-s', _('Server settings'));
+		s = m.section(form.NamedSection, 'hbbs', 'rustdesk', _('Server settings'));
 
 		o = s.option(form.Flag, 'enabled', _('Enable RustDesk Server'));
 
@@ -83,7 +83,7 @@ return view.extend({
 		o.enabled = 'Y';
 		o.disabled = 'N';
 
-		s = m.section(form.NamedSection, 'hbbr', 'rustdesk-s', _('Relay settings'));
+		s = m.section(form.NamedSection, 'hbbr', 'rustdesk', _('Relay settings'));
 
 		o = s.option(form.Flag, 'enabled', _('Enable RustDesk Relay'));
 
