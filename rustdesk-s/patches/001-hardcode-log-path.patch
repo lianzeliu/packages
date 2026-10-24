@@ -7,7 +7,7 @@
 -        .log_to_stdout()
 +        .log_to_file(
 +            FileSpec::default()
-+                .directory("/var/run/rustdesk-server")
++                .directory("/var/run/rustdesk-s")
 +                .basename("hbbr")
 +                .suffix("log")
 +                .suppress_timestamp()
@@ -30,7 +30,7 @@
 -        .log_to_stdout()
 +        .log_to_file(
 +            FileSpec::default()
-+                .directory("/var/run/rustdesk-server")
++                .directory("/var/run/rustdesk-s")
 +                .basename("hbbs")
 +                .suffix("log")
 +                .suppress_timestamp()

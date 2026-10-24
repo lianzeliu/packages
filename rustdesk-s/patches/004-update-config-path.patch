@@ -50,7 +50,7 @@
 -                std::env::temp_dir()
 -            }
 -        }
-+        PathBuf::from("/var/run/rustdesk-server")
++        PathBuf::from("/var/run/rustdesk-s")
      }
  
      pub fn path<P: AsRef<Path>>(p: P) -> PathBuf {
@@ -71,7 +71,7 @@
 -                return path;
 -            }
 -            "".into()
-+            let mut path = PathBuf::from("/var/run/rustdesk-server");
++            let mut path = PathBuf::from("/var/run/rustdesk-s");
 +            path.push(p);
 +            path
          }
