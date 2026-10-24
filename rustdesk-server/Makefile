@@ -10,7 +10,7 @@ PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/lianzeliu/rustdesk-server.git
-PKG_SOURCE_VERSION:=openwrt
+PKG_SOURCE_VERSION:=openwrt-1.1.16
 
 PKG_MAINTAINER:=Tianling Shen <cnsztl@immortalwrt.org>
 PKG_LICENSE:=AGPL-3.0-only
