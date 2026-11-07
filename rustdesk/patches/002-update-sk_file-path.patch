@@ -1,11 +1,11 @@
 --- a/src/common.rs
 +++ b/src/common.rs
-@@ -105,7 +105,7 @@ pub fn now() -> u64 {
+@@ -347,7 +347,7 @@ fn write_public_key(path: &str, pk: &str, required: bool) -> ResultType<()> {
  }
  
- pub fn gen_sk(wait: u64) -> (String, Option<sign::SecretKey>) {
+ pub fn gen_sk(wait: u64) -> ResultType<(String, Option<sign::SecretKey>)> {
 -    let sk_file = "id_ed25519";
 +    let sk_file = "/etc/rustdesk/id_ed25519";
+     let pub_file = format!("{sk_file}.pub");
      if wait > 0 && !std::path::Path::new(sk_file).exists() {
          std::thread::sleep(std::time::Duration::from_millis(wait));
-     }
